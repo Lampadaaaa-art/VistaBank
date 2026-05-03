@@ -1,0 +1,30 @@
+@import "tailwindcss";
+/* @import "tw-animate-css"; */
+
+@theme {
+  --color-primary: #b80033;
+  --color-primary-container: #e60042;
+  --color-primary-fixed: #ffdada;
+  --color-surface: #f9f9ff;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f0f3ff;
+  --color-surface-container: #e8eeff;
+  --color-on-surface: #111c2d;
+  --color-secondary: #565e71;
+  --color-secondary-container: #dbe2f9;
+  --color-outline: #926e6f;
+  --color-outline-variant: #e7bcbd;
+  
+  --font-headline: var(--font-manrope);
+  --font-body: var(--font-inter);
+}
+
+body {
+  background-color: var(--color-surface);
+  color: var(--color-on-surface);
+  font-family: var(--font-body);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-headline);
+}
