@@ -33,18 +33,21 @@ export async function POST(request: NextRequest) {
           titre:      data.titre,
           message:    data.message,
           guichet_id: data.guichetId ?? null,
-          ticket_id:  data.ticketId ?? null,
+          ticket_id:  data.ticketId  ?? null,
           resolue:    false,
-          created_at: new Date().toISOString(),
         })
         .select()
         .single()
 
-      if (insertError) return err("Erreur lors de la création de l'alerte", 500)
+      if (insertError) {
+        console.error("[alertes POST] Supabase error:", insertError)
+        return err(insertError.message ?? "Erreur lors de la création de l'alerte", 500)
+      }
       return ok(mapAlerte(alerte), 201)
     } catch (e) {
       if (e instanceof ZodError) return handleZodError(e)
-      return err("Erreur lors de la création de l'alerte", 500)
+      console.error("[alertes POST] unexpected error:", e)
+      return err(e instanceof Error ? e.message : "Erreur lors de la création de l'alerte", 500)
     }
   })
 }
@@ -57,7 +60,7 @@ function mapAlerte(row: Record<string, unknown>) {
     titre:         row.titre,
     message:       row.message,
     guichetId:     row.guichet_id ?? undefined,
-    ticketId:      row.ticket_id ?? undefined,
+    ticketId:      row.ticket_id  ?? undefined,
     resolue:       row.resolue,
     resolueParUid: row.resolue_par_uid ?? undefined,
     resolueAt:     row.resolue_at ?? undefined,

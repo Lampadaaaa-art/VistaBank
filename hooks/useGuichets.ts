@@ -1,49 +1,39 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { getSupabaseClient } from "@/lib/supabase"
+import { useEffect, useState, useCallback, useRef } from "react"
 import type { Guichet } from "@/lib/types"
 
-export function useGuichets() {
+export function useGuichets(publicMode = false) {
   const [guichets, setGuichets] = useState<Guichet[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const initializedRef = useRef(false)
 
-  useEffect(() => {
-    const supabase = getSupabaseClient()
+  const url = publicMode ? "/api/public/guichets" : "/api/guichets"
 
-    async function fetchGuichets() {
-      const { data, error: err } = await supabase
-        .from("guichets")
-        .select("*")
-        .order("numero", { ascending: true })
-      if (err) { setError(err.message); return }
-      setGuichets((data ?? []).map(mapGuichet))
+  const fetchGuichets = useCallback(async () => {
+    try {
+      const res = await fetch(url, { cache: "no-store" })
+      // On 401 before the first successful load, the auth cookie is likely still being
+      // synced by useAuth — stay in loading state and retry on the next poll.
+      if (res.status === 401 && !initializedRef.current) return
+      if (!res.ok) { setError(`HTTP ${res.status}`); setLoading(false); return }
+      const data = await res.json()
+      initializedRef.current = true
+      setGuichets(Array.isArray(data) ? data : [])
+      setError(null)
+      setLoading(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur réseau")
       setLoading(false)
     }
+  }, [url])
 
+  useEffect(() => {
     fetchGuichets()
+    const interval = setInterval(fetchGuichets, 3000)
+    return () => clearInterval(interval)
+  }, [fetchGuichets])
 
-    const channel = supabase
-      .channel("guichets-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "guichets" }, fetchGuichets)
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
-  }, [])
-
-  return { guichets, loading, error }
-}
-
-function mapGuichet(row: Record<string, unknown>): Guichet {
-  return {
-    id:            row.id as string,
-    numero:        row.numero as number,
-    nom:           row.nom as string,
-    serviceCode:   row.service_code as string,
-    caissierUid:   row.caissier_uid as string | undefined,
-    statut:        row.statut as Guichet["statut"],
-    ticketEnCours: row.ticket_en_cours as string | undefined,
-    updatedAt:     row.updated_at as string,
-  }
+  return { guichets, loading, error, refresh: fetchGuichets }
 }

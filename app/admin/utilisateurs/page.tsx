@@ -53,6 +53,7 @@ export default function Utilisateurs() {
   const [form, setForm] = useState<FormState>(FORM_INIT);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const openCreate = () => {
     setEditTarget(null);
@@ -99,13 +100,18 @@ export default function Utilisateurs() {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const d = await res.json();
-        setError(d.error ?? 'Erreur lors de la création');
+        let msg = 'Erreur lors de la création';
+        try { const d = await res.json(); msg = d.error ?? msg; } catch { /* non-JSON */ }
+        setError(msg);
         return;
       }
       setIsModalOpen(false);
       setForm(FORM_INIT);
+      setSuccess(`Utilisateur "${form.prenom} ${form.nom}" créé avec succès.`);
+      setTimeout(() => setSuccess(''), 4000);
       await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur réseau');
     } finally {
       setSaving(false);
     }
@@ -136,13 +142,18 @@ export default function Utilisateurs() {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const d = await res.json();
-        setError(d.error ?? 'Erreur lors de la modification');
+        let msg = 'Erreur lors de la modification';
+        try { const d = await res.json(); msg = d.error ?? msg; } catch { /* non-JSON */ }
+        setError(msg);
         return;
       }
       setIsModalOpen(false);
       setEditTarget(null);
+      setSuccess(`Utilisateur "${form.prenom} ${form.nom}" modifié avec succès.`);
+      setTimeout(() => setSuccess(''), 4000);
       await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur réseau');
     } finally {
       setSaving(false);
     }
@@ -150,8 +161,10 @@ export default function Utilisateurs() {
 
   const handleDelete = async (userId: string) => {
     if (!confirm('Supprimer cet utilisateur définitivement ?')) return;
-    await fetch(`/api/users/${userId}`, { method: 'DELETE' });
-    await refresh();
+    try {
+      await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+      await refresh();
+    } catch { /* ignore */ }
   };
 
   const toggleService = (code: string) => {
@@ -223,6 +236,12 @@ export default function Utilisateurs() {
         </header>
 
         <div className="p-8 max-w-7xl mx-auto w-full">
+          {success && (
+            <div className="mb-6 px-6 py-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 font-semibold text-sm">
+              {success}
+            </div>
+          )}
+
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-6">
             <div className="max-w-2xl">
               <h3 className="text-4xl font-extrabold text-on-surface mb-3 tracking-tight font-headline">Annuaire des accès</h3>

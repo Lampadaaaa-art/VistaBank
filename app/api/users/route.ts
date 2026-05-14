@@ -30,37 +30,48 @@ export async function POST(request: NextRequest) {
       })
 
       if (authError) {
-        if (authError.message.includes("already registered") || authError.message.includes("already been registered"))
+        console.error("[POST /api/users] auth.admin.createUser error:", authError.message)
+        if (
+          authError.message.includes("already registered") ||
+          authError.message.includes("already been registered") ||
+          authError.message.includes("already exists")
+        )
           return err("Cette adresse email est déjà utilisée", 409)
-        return err("Erreur lors de la création de l'utilisateur", 500)
+        return err(`Erreur auth Supabase : ${authError.message}`, 500)
       }
 
-      const now = new Date().toISOString()
+      const insertPayload: Record<string, unknown> = {
+        id:     authData.user.id,
+        email:  data.email,
+        nom:    data.nom,
+        prenom: data.prenom,
+        role:   data.role,
+        statut: data.statut,
+      }
+      if (data.guichetId) {
+        insertPayload.guichet_id = data.guichetId
+        // Release any existing caissier assigned to this guichet to avoid duplicates
+        await adminSupabase.from("users").update({ guichet_id: null }).eq("guichet_id", data.guichetId)
+      }
+      if (data.servicesAutorises && data.servicesAutorises.length > 0) {
+        insertPayload.services_autorises = data.servicesAutorises
+      }
       const { data: userDoc, error: dbError } = await adminSupabase
         .from("users")
-        .insert({
-          id:                 authData.user.id,
-          email:              data.email,
-          nom:                data.nom,
-          prenom:             data.prenom,
-          role:               data.role,
-          guichet_id:         data.guichetId ?? null,
-          services_autorises: data.servicesAutorises ?? [],
-          statut:             data.statut,
-          created_at:         now,
-          updated_at:         now,
-        })
+        .insert(insertPayload)
         .select()
         .single()
 
       if (dbError) {
+        console.error("[POST /api/users] DB insert error:", dbError.message, dbError.code)
         await adminSupabase.auth.admin.deleteUser(authData.user.id)
-        return err("Erreur lors de la création de l'utilisateur", 500)
+        return err(`Erreur base de données : ${dbError.message}`, 500)
       }
 
       return ok(mapUser(userDoc), 201)
     } catch (e) {
       if (e instanceof ZodError) return handleZodError(e)
+      console.error("[POST /api/users] unexpected error:", e)
       return err("Erreur lors de la création de l'utilisateur", 500)
     }
   })

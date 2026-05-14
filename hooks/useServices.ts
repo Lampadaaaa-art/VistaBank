@@ -1,7 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { getSupabaseClient } from "@/lib/supabase"
+import { useEffect, useState, useCallback } from "react"
 import type { Service } from "@/lib/types"
 
 export function useServices(actifsOnly = false) {
@@ -9,40 +8,27 @@ export function useServices(actifsOnly = false) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const supabase = getSupabaseClient()
+  const url = actifsOnly ? "/api/public/services" : "/api/services"
 
-    async function fetchServices() {
-      let q = supabase.from("services").select("*").order("ordre", { ascending: true })
-      if (actifsOnly) q = q.eq("actif", true)
-
-      const { data, error: err } = await q
-      if (err) { setError(err.message); return }
-      setServices((data ?? []).map(mapService))
+  const fetchServices = useCallback(async () => {
+    try {
+      const res = await fetch(url, { cache: "no-store" })
+      if (!res.ok) { setError(`HTTP ${res.status}`); setLoading(false); return }
+      const data = await res.json()
+      setServices(Array.isArray(data) ? data : [])
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur réseau")
+    } finally {
       setLoading(false)
     }
+  }, [url])
 
+  useEffect(() => {
     fetchServices()
+    const interval = setInterval(fetchServices, 3000)
+    return () => clearInterval(interval)
+  }, [fetchServices])
 
-    const channel = supabase
-      .channel("services-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "services" }, fetchServices)
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
-  }, [actifsOnly])
-
-  return { services, loading, error }
-}
-
-function mapService(row: Record<string, unknown>): Service {
-  return {
-    id:          row.id as string,
-    code:        row.code as string,
-    nom:         row.nom as string,
-    icone:       row.icone as string | undefined,
-    tempsEstime: row.temps_estime as number,
-    actif:       row.actif as boolean,
-    ordre:       row.ordre as number,
-  }
+  return { services, loading, error, refresh: fetchServices }
 }

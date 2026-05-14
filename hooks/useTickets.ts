@@ -1,13 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { getSupabaseClient } from "@/lib/supabase"
+import { useEffect, useState, useCallback, useRef } from "react"
 import type { Ticket, TicketStatut } from "@/lib/types"
 
 export interface TicketFilters {
   statut?: TicketStatut | TicketStatut[]
   serviceCode?: string
   guichetId?: string
+  dateFrom?: Date
+  publicMode?: boolean
 }
 
 export function useTickets(filters?: TicketFilters) {
@@ -15,61 +16,62 @@ export function useTickets(filters?: TicketFilters) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const publicMode = filters?.publicMode ?? false
+  const statutKey = Array.isArray(filters?.statut) ? filters.statut.join(",") : filters?.statut
+
+  const fetchRef = useRef<(() => Promise<void>) | null>(null)
+
   useEffect(() => {
-    const supabase = getSupabaseClient()
+    const initialized = { current: false }
 
     async function fetchTickets() {
-      let q = supabase.from("tickets").select("*").order("created_at", { ascending: true })
+      const base = publicMode ? "/api/public/queue" : "/api/tickets"
+      const params = new URLSearchParams()
 
       if (filters?.statut) {
-        if (Array.isArray(filters.statut)) {
-          q = q.in("statut", filters.statut)
-        } else {
-          q = q.eq("statut", filters.statut)
-        }
+        params.set(
+          "statut",
+          Array.isArray(filters.statut) ? filters.statut.join(",") : filters.statut
+        )
       }
-      if (filters?.serviceCode) q = q.eq("service_code", filters.serviceCode)
-      if (filters?.guichetId)   q = q.eq("guichet_id", filters.guichetId)
+      if (filters?.serviceCode) params.set("serviceCode", filters.serviceCode)
+      if (filters?.guichetId) params.set("guichetId", filters.guichetId)
+      if (filters?.dateFrom) params.set("dateFrom", filters.dateFrom.toISOString())
 
-      const { data, error: err } = await q
-      if (err) { setError(err.message); return }
-      setTickets((data ?? []).map(mapTicket))
-      setLoading(false)
+      const url = params.toString() ? `${base}?${params}` : base
+
+      try {
+        const res = await fetch(url, { cache: "no-store" })
+        // On 401 before first success, the auth cookie is still syncing — stay in loading state.
+        if (res.status === 401 && !initialized.current) return
+        if (!res.ok) { setError(`HTTP ${res.status}`); setLoading(false); return }
+        const data = await res.json()
+        initialized.current = true
+        setTickets(Array.isArray(data) ? data : [])
+        setError(null)
+        setLoading(false)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Erreur réseau")
+        setLoading(false)
+      }
     }
 
+    fetchRef.current = fetchTickets
     fetchTickets()
-
-    const channel = supabase
-      .channel("tickets-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "tickets" }, fetchTickets)
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
+    const interval = setInterval(fetchTickets, 3000)
+    return () => clearInterval(interval)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    Array.isArray(filters?.statut) ? filters.statut.join(",") : filters?.statut,
+    publicMode,
+    statutKey,
     filters?.serviceCode,
     filters?.guichetId,
+    filters?.dateFrom?.toISOString(),
   ])
 
-  return { tickets, loading, error }
-}
+  const refresh = useCallback(() => {
+    fetchRef.current?.()
+  }, [])
 
-function mapTicket(row: Record<string, unknown>): Ticket {
-  return {
-    id:           row.id as string,
-    numero:       row.numero as string,
-    serviceCode:  row.service_code as string,
-    serviceName:  row.service_name as string,
-    priorite:     row.priorite as Ticket["priorite"],
-    statut:       row.statut as Ticket["statut"],
-    guichetId:    row.guichet_id as string | undefined,
-    caissierUid:  row.caissier_uid as string | undefined,
-    createdAt:    row.created_at as string,
-    appelleAt:    row.appelle_at as string | undefined,
-    termineAt:    row.termine_at as string | undefined,
-    tempsAttente: row.temps_attente as number | undefined,
-    tempsService: row.temps_service as number | undefined,
-    notes:        row.notes as string | undefined,
-  }
+  return { tickets, loading, error, refresh }
 }

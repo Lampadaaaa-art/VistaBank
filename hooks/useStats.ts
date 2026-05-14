@@ -5,8 +5,15 @@ import { useTickets } from "@/hooks/useTickets"
 import { useGuichets } from "@/hooks/useGuichets"
 
 export function useStats() {
+  const todayStart = useMemo(() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  }, [])
+
   const { tickets, loading: ticketsLoading } = useTickets({
     statut: ["attente", "en_cours", "termine"],
+    dateFrom: todayStart,
   })
   const { guichets, loading: guichetsLoading } = useGuichets()
 
@@ -56,5 +63,5 @@ export function useStats() {
     }
   }, [tickets, guichets])
 
-  return { stats, loading: ticketsLoading || guichetsLoading }
+  return { stats, loading: ticketsLoading || guichetsLoading, tickets }
 }

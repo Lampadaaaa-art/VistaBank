@@ -22,11 +22,12 @@ const PRIORITY_LABEL: Record<string, string> = {
 };
 
 export default function FileAttente() {
-  const { user } = useAuth();
-  const { tickets: attenteTickets, loading } = useTickets({ statut: "attente" });
-  const { guichets } = useGuichets();
+  const { user, loading: authLoading } = useAuth();
+  const { tickets: attenteTickets, loading, refresh: refreshAttente } = useTickets({ statut: "attente" });
+  const { guichets, loading: guichetsLoading } = useGuichets();
   const [search, setSearch] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const monGuichet = guichets.find(g =>
     user?.guichetId ? g.id === user.guichetId : g.caissierUid === user?.uid
@@ -43,12 +44,21 @@ export default function FileAttente() {
   const handleAppeler = async (ticketId: string) => {
     if (!monGuichet || actionLoading) return;
     setActionLoading(true);
+    setActionError(null);
     try {
-      await fetch(`/api/tickets/${ticketId}`, {
+      const res = await fetch(`/api/tickets/${ticketId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ statut: "en_cours", guichetId: monGuichet.id }),
       });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setActionError(d.error ?? `Erreur ${res.status}`);
+      } else {
+        refreshAttente();
+      }
+    } catch {
+      setActionError('Erreur réseau. Vérifiez votre connexion.');
     } finally {
       setActionLoading(false);
     }
@@ -104,6 +114,18 @@ export default function FileAttente() {
         </header>
 
         <div className="p-10 max-w-6xl mx-auto w-full">
+          {!guichetsLoading && !authLoading && user && !monGuichet && (
+            <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl px-6 py-4 text-amber-800 text-sm font-semibold flex items-center gap-3">
+              <span className="text-amber-500 text-lg">⚠</span>
+              Aucun guichet assigné — vous pouvez voir les tickets mais pas les appeler. Contactez un administrateur.
+            </div>
+          )}
+          {actionError && (
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-xl px-6 py-4 text-red-700 text-sm font-semibold flex items-center justify-between gap-3">
+              <span>{actionError}</span>
+              <button onClick={() => setActionError(null)} className="text-red-400 hover:text-red-600 font-bold text-lg leading-none">×</button>
+            </div>
+          )}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-6">
             <div className="max-w-2xl">
               <h3 className="text-4xl font-extrabold text-on-surface mb-3 tracking-tight font-headline">Tickets en attente</h3>

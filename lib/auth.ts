@@ -56,30 +56,34 @@ export async function createSession(accessToken: string): Promise<SessionUser> {
   cookieStore.set(SESSION_COOKIE, accessToken, cookieOptions)
   cookieStore.set(ROLE_COOKIE, await signRole(sessionUser.role), cookieOptions)
 
-  await adminSupabase
-    .from("users")
-    .update({ statut: "actif", updated_at: new Date().toISOString() })
-    .eq("id", user.id)
-
   return sessionUser
 }
 
 export async function getSession(): Promise<SessionUser | null> {
   const cookieStore = await cookies()
   const accessToken = cookieStore.get(SESSION_COOKIE)?.value
-  if (!accessToken) return null
+  if (!accessToken) {
+    console.warn("[auth] getSession: cookie __session absent")
+    return null
+  }
 
   try {
     const { data: { user }, error } = await adminSupabase.auth.getUser(accessToken)
-    if (error || !user) return null
+    if (error || !user) {
+      console.warn("[auth] getSession: auth.getUser() échoué —", error?.message ?? "user null")
+      return null
+    }
 
     const { data: userData, error: userError } = await adminSupabase
       .from("users")
-      .select("nom, prenom, role, guichet_id")
+      .select("nom, prenom, role, guichet_id, statut")
       .eq("id", user.id)
       .single()
 
-    if (userError || !userData) return null
+    if (userError || !userData) {
+      console.warn("[auth] getSession: utilisateur introuvable en base pour uid", user.id, "—", userError?.message)
+      return null
+    }
 
     return {
       uid: user.id,
@@ -88,28 +92,16 @@ export async function getSession(): Promise<SessionUser | null> {
       prenom: userData.prenom,
       role: userData.role as UserRole,
       guichetId: userData.guichet_id ?? undefined,
+      statut: userData.statut as import("@/lib/types").UserStatut,
     }
-  } catch {
+  } catch (e) {
+    console.error("[auth] getSession: erreur inattendue —", e)
     return null
   }
 }
 
 export async function clearSession(): Promise<void> {
   const cookieStore = await cookies()
-  const accessToken = cookieStore.get(SESSION_COOKIE)?.value
-  if (accessToken) {
-    try {
-      const { data: { user } } = await adminSupabase.auth.getUser(accessToken)
-      if (user) {
-        await adminSupabase
-          .from("users")
-          .update({ statut: "inactif", updated_at: new Date().toISOString() })
-          .eq("id", user.id)
-      }
-    } catch {
-      // token expiré, on continue
-    }
-  }
   cookieStore.delete(SESSION_COOKIE)
   cookieStore.delete(ROLE_COOKIE)
 }

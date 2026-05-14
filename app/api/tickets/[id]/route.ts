@@ -49,21 +49,38 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
         const guichetId = (data.guichetId ?? ticket.guichet_id) as string | undefined
         if (guichetId) {
-          await adminSupabase
+          const { error: gErr } = await adminSupabase
             .from("guichets")
             .update({ ticket_en_cours: null, updated_at: now })
             .eq("id", guichetId)
+          if (gErr) console.error("[PATCH /api/tickets] guichet clear error:", gErr.message)
+        }
+      }
+
+      if (data.statut === "transfere") {
+        const guichetId = (data.guichetId ?? ticket.guichet_id) as string | undefined
+        if (guichetId) {
+          const { error: gErr } = await adminSupabase
+            .from("guichets")
+            .update({ ticket_en_cours: null, updated_at: now })
+            .eq("id", guichetId)
+          if (gErr) console.error("[PATCH /api/tickets] guichet transfere clear error:", gErr.message)
         }
       }
 
       if (data.statut === "en_cours" && data.guichetId) {
-        await adminSupabase
+        const { error: gErr } = await adminSupabase
           .from("guichets")
           .update({ ticket_en_cours: ticket.numero as string, statut: "ouvert", updated_at: now })
           .eq("id", data.guichetId)
+        if (gErr) console.error("[PATCH /api/tickets] guichet en_cours update error:", gErr.message)
       }
 
-      await adminSupabase.from("tickets").update(updates).eq("id", id)
+      const { error: updateError } = await adminSupabase.from("tickets").update(updates).eq("id", id)
+      if (updateError) {
+        console.error("[PATCH /api/tickets] ticket update error:", updateError.message)
+        return err(updateError.message, 500)
+      }
       return ok({ id, ...updates })
     } catch (e) {
       if (e instanceof ZodError) return handleZodError(e)
@@ -87,7 +104,7 @@ function mapTicket(row: Record<string, unknown>) {
     id:           row.id,
     numero:       row.numero,
     serviceCode:  row.service_code,
-    serviceName:  row.service_name,
+    serviceName:  (row.service_name ?? row.service_code) as string,
     priorite:     row.priorite,
     statut:       row.statut,
     guichetId:    row.guichet_id ?? undefined,

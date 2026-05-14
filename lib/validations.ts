@@ -35,7 +35,7 @@ export const createGuichetSchema = z.object({
   numero: z.number().int().positive(),
   nom: z.string().min(1),
   serviceCode: z.string().min(1),
-  caissierUid: z.string().optional(),
+  caissierUid: z.string().nullable().optional(),
   statut: z.enum(["ouvert", "ferme", "pause", "hors_ligne"]).default("ferme"),
 })
 

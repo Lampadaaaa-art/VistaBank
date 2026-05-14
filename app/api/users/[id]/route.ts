@@ -24,27 +24,29 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         .from("users").select("*").eq("id", id).single()
       if (fetchError || !current) return err("Utilisateur introuvable", 404)
 
-      const now = new Date().toISOString()
-      const updates: Record<string, unknown> = { updated_at: now }
+      const updates: Record<string, unknown> = {}
 
-      if (data.nom !== undefined)               updates.nom = data.nom
-      if (data.prenom !== undefined)             updates.prenom = data.prenom
-      if (data.role !== undefined)               updates.role = data.role
-      if (data.statut !== undefined)             updates.statut = data.statut
-      if ("guichetId" in data)                  updates.guichet_id = data.guichetId ?? null
-      if (data.servicesAutorises !== undefined)  updates.services_autorises = data.servicesAutorises
+      if (data.nom !== undefined)    updates.nom = data.nom
+      if (data.prenom !== undefined) updates.prenom = data.prenom
+      if (data.role !== undefined)   updates.role = data.role
+      if (data.statut !== undefined) updates.statut = data.statut
+      if ("guichetId" in data)       updates.guichet_id = data.guichetId ?? null
+      if (data.servicesAutorises !== undefined)
+        updates.services_autorises = data.servicesAutorises
 
-      await adminSupabase.from("users").update(updates).eq("id", id)
+      const { error: updateError } = await adminSupabase.from("users").update(updates).eq("id", id)
+      if (updateError) return err(`Erreur lors de la mise à jour: ${updateError.message}`, 500)
 
       // Cascade statut → guichet
       if (data.statut && data.statut !== current.statut) {
         const role = current.role as string
         const guichetId = current.guichet_id as string | undefined
 
+        const ts = new Date().toISOString()
         if (data.statut === "inactif") {
           if (role === "caissier" && guichetId) {
             await adminSupabase.from("guichets")
-              .update({ statut: "hors_ligne", updated_at: now })
+              .update({ statut: "hors_ligne", updated_at: ts })
               .eq("id", guichetId)
           }
         } else if (data.statut === "actif") {
@@ -53,14 +55,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
               .from("guichets").select("statut").eq("id", guichetId).single()
             if (g?.statut === "hors_ligne") {
               await adminSupabase.from("guichets")
-                .update({ statut: "ferme", updated_at: now })
+                .update({ statut: "ferme", updated_at: ts })
                 .eq("id", guichetId)
             }
           }
         } else if (data.statut === "pause") {
           if (role === "caissier" && guichetId) {
             await adminSupabase.from("guichets")
-              .update({ statut: "pause", updated_at: now })
+              .update({ statut: "pause", updated_at: ts })
               .eq("id", guichetId)
           }
         }

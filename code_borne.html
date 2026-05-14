@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+
+<html class="light" lang="fr"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Borne Client - Banque Vista Gui</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-dim": "#f1f3f4",
+                        "primary-container": "#ffe8eb",
+                        "on-surface": "#1d1b1e",
+                        "on-tertiary-container": "#211b00",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-container": "#221b00",
+                        "error": "#ba1a1a",
+                        "tertiary-container": "#ffdf9d",
+                        "tertiary-fixed-dim": "#e2c46d",
+                        "on-primary-container": "#41000b",
+                        "on-tertiary-fixed": "#251a00",
+                        "secondary-fixed-dim": "#e2c46d",
+                        "on-secondary-fixed-variant": "#594400",
+                        "surface-container-high": "#e6e8eb",
+                        "outline-variant": "#d5d8dc",
+                        "primary-fixed-dim": "#ffb2bb",
+                        "surface-container-highest": "#e0e3e6",
+                        "on-error-container": "#410002",
+                        "outline": "#857375",
+                        "on-primary-fixed": "#41000b",
+                        "on-tertiary-fixed-variant": "#594400",
+                        "secondary-container": "#f1f3f4",
+                        "primary": "#E60042",
+                        "surface-tint": "#E60042",
+                        "on-primary": "#ffffff",
+                        "inverse-on-surface": "#f5eff4",
+                        "inverse-surface": "#322f33",
+                        "tertiary": "#705d00",
+                        "inverse-primary": "#ffb2bb",
+                        "on-secondary-fixed": "#251a00",
+                        "on-error": "#ffffff",
+                        "secondary-fixed": "#ffdf9d",
+                        "on-surface-variant": "#534345",
+                        "on-primary-fixed-variant": "#930026",
+                        "surface-bright": "#fffbff",
+                        "surface-variant": "#f4dddf",
+                        "surface": "#fffbff",
+                        "primary-fixed": "#ffd9dd",
+                        "tertiary-fixed": "#ffdf9d",
+                        "surface-container": "#f0eff3",
+                        "secondary": "#705d00",
+                        "error-container": "#ffdad6",
+                        "on-background": "#1d1b1e",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-low": "#f8f6fa",
+                        "background": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .kiosk-btn {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .kiosk-btn:active {
+            transform: scale(0.97);
+        }
+    </style>
+</head>
+<body class="bg-white font-body text-on-surface min-h-screen overflow-hidden select-none">
+<!-- Background Pattern -->
+<div class="fixed inset-0 z-0 opacity-[0.03] pointer-events-none" data-alt="subtle geometric dot pattern in red on a white background" style="background-image: radial-gradient(#E60042 1px, transparent 1px); background-size: 32px 32px;">
+</div>
+<!-- Main Container (Full Screen Kiosk View) -->
+<div class="relative z-10 flex flex-col h-screen">
+<!-- Header Section -->
+<header class="h-28 flex items-center justify-between px-16 bg-white border-b border-surface-container">
+<div class="flex items-center gap-5">
+<div class="w-14 h-14 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-white text-3xl" data-icon="account_balance">account_balance</span>
+</div>
+<div>
+<h1 class="font-headline font-extrabold text-2xl tracking-tight text-on-surface">Banque Vista Gui</h1>
+<p class="text-primary font-bold tracking-[0.2em] text-[10px] uppercase">L'Excellence Institutionnelle</p>
+</div>
+</div>
+<div class="text-right">
+<p class="text-2xl font-headline font-extrabold text-on-surface">14:28</p>
+<p class="text-xs font-bold text-outline uppercase tracking-wider">Lundi, 22 Mai 2024</p>
+</div>
+</header>
+<!-- Dynamic Content Area -->
+<main class="flex-1 flex items-center justify-center p-8">
+<!-- Service Selection Grid (Active State) -->
+<div class="w-full max-w-6xl" id="service-grid">
+<div class="text-center mb-16">
+<h2 class="font-headline font-black text-5xl text-on-surface mb-4">Bienvenue</h2>
+<p class="text-xl text-outline font-medium">Veuillez choisir un service pour obtenir votre numéro de passage</p>
+</div>
+<!-- Bento Grid Layout for Services -->
+<div class="grid grid-cols-12 gap-6 auto-rows-[160px]">
+<!-- Service A: Dépôt -->
+<button class="kiosk-btn col-span-4 row-span-1 bg-white rounded-full p-6 flex items-center gap-6 shadow-sm border border-outline-variant hover:border-primary hover:shadow-md group">
+<div class="w-16 h-16 bg-primary-fixed flex items-center justify-center rounded-2xl group-hover:bg-primary transition-colors">
+<span class="material-symbols-outlined text-primary text-3xl group-hover:text-white" data-icon="payments">payments</span>
+</div>
+<div class="text-left">
+<span class="block text-xs font-bold text-primary tracking-widest mb-1">A</span>
+<span class="block text-xl font-headline font-extrabold text-on-surface">Dépôt</span>
+</div>
+</button>
+<!-- Service B: Retrait -->
+<button class="kiosk-btn col-span-4 row-span-1 bg-white rounded-full p-6 flex items-center gap-6 shadow-sm border border-outline-variant hover:border-primary hover:shadow-md group">
+<div class="w-16 h-16 bg-primary-fixed flex items-center justify-center rounded-2xl group-hover:bg-primary transition-colors">
+<span class="material-symbols-outlined text-primary text-3xl group-hover:text-white" data-icon="atm">atm</span>
+</div>
+<div class="text-left">
+<span class="block text-xs font-bold text-primary tracking-widest mb-1">B</span>
+<span class="block text-xl font-headline font-extrabold text-on-surface">Retrait</span>
+</div>
+</button>
+<!-- Service C: Ouverture de compte -->
+<button class="kiosk-btn col-span-4 row-span-2 bg-primary rounded-full p-10 flex flex-col justify-between shadow-xl shadow-primary/20 hover:scale-[1.02]">
+<div class="w-20 h-20 bg-white/20 flex items-center justify-center rounded-2xl backdrop-blur-md">
+<span class="material-symbols-outlined text-white text-4xl" data-icon="person_add">person_add</span>
+</div>
+<div>
+<span class="block text-xs font-bold text-white/70 tracking-widest mb-2">C</span>
+<span class="block text-3xl font-headline font-extrabold text-white leading-tight">Ouverture de compte</span>
+<p class="mt-4 text-white/80 text-sm font-medium">Rejoignez-nous aujourd'hui</p>
+</div>
+</button>
+<!-- Service G: Transfert -->
+<button class="kiosk-btn col-span-8 row-span-1 bg-surface-container-low rounded-full p-6 flex items-center justify-between shadow-sm border border-outline-variant hover:border-primary group">
+<div class="flex items-center gap-6">
+<div class="w-16 h-16 bg-white flex items-center justify-center rounded-2xl shadow-sm">
+<span class="material-symbols-outlined text-primary text-3xl" data-icon="swap_horiz">swap_horiz</span>
+</div>
+<div class="text-left">
+<span class="block text-xs font-bold text-primary tracking-widest mb-1">G</span>
+<span class="block text-2xl font-headline font-extrabold text-on-surface">Transfert d'argent</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-primary text-4xl mr-6 group-hover:translate-x-2 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</button>
+<!-- Service D: Services digitaux -->
+<button class="kiosk-btn col-span-4 row-span-1 bg-white rounded-full p-6 flex items-center gap-6 shadow-sm border border-outline-variant hover:border-primary hover:shadow-md group">
+<div class="w-16 h-16 bg-primary-fixed flex items-center justify-center rounded-2xl group-hover:bg-primary transition-colors">
+<span class="material-symbols-outlined text-primary text-3xl group-hover:text-white" data-icon="smartphone">smartphone</span>
+</div>
+<div class="text-left">
+<span class="block text-xs font-bold text-primary tracking-widest mb-1">D</span>
+<span class="block text-xl font-headline font-extrabold text-on-surface">Services digitaux</span>
+</div>
+</button>
+<!-- Service E: Réclamation -->
+<button class="kiosk-btn col-span-4 row-span-1 bg-white rounded-full p-6 flex items-center gap-6 shadow-sm border border-outline-variant hover:border-primary hover:shadow-md group">
+<div class="w-16 h-16 bg-primary-fixed flex items-center justify-center rounded-2xl group-hover:bg-primary transition-colors">
+<span class="material-symbols-outlined text-primary text-3xl group-hover:text-white" data-icon="support_agent">support_agent</span>
+</div>
+<div class="text-left">
+<span class="block text-xs font-bold text-primary tracking-widest mb-1">E</span>
+<span class="block text-xl font-headline font-extrabold text-on-surface">Réclamation</span>
+</div>
+</button>
+<!-- Service F: Crédit -->
+<button class="kiosk-btn col-span-4 row-span-1 bg-white rounded-full p-6 flex items-center gap-6 shadow-sm border border-outline-variant hover:border-primary hover:shadow-md group">
+<div class="w-16 h-16 bg-primary-fixed flex items-center justify-center rounded-2xl group-hover:bg-primary transition-colors">
+<span class="material-symbols-outlined text-primary text-3xl group-hover:text-white" data-icon="real_estate_agent">real_estate_agent</span>
+</div>
+<div class="text-left">
+<span class="block text-xs font-bold text-primary tracking-widest mb-1">F</span>
+<span class="block text-xl font-headline font-extrabold text-on-surface">Crédit</span>
+</div>
+</button>
+</div>
+</div>
+<!-- Ticket Success State (Initially Hidden/Overlaid) -->
+<div class="hidden fixed inset-0 z-50 glass-panel flex flex-col items-center justify-center p-12" id="ticket-view">
+<div class="bg-white w-[500px] rounded-[3rem] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)] overflow-hidden flex flex-col items-center animate-ticket-pop border border-outline-variant/30">
+<!-- Ticket Header -->
+<div class="w-full bg-primary py-10 flex flex-col items-center gap-3">
+<span class="material-symbols-outlined text-white text-6xl" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<h3 class="text-white font-headline font-extrabold text-2xl uppercase tracking-[0.2em]">Ticket Généré</h3>
+</div>
+<!-- Ticket Content -->
+<div class="w-full p-14 flex flex-col items-center text-center">
+<p class="text-outline text-xs uppercase tracking-[0.2em] font-bold mb-6">Votre Numéro de Passage</p>
+<div class="text-[140px] font-headline font-black text-on-surface leading-none mb-4">A-023</div>
+<div class="w-full border-t border-dashed border-outline-variant/50 my-10"></div>
+<div class="grid grid-cols-2 gap-10 w-full">
+<div class="text-left">
+<p class="text-outline text-[10px] uppercase font-bold mb-2 tracking-widest">Attente estimée</p>
+<p class="text-on-surface font-black text-2xl">~ 12 min</p>
+</div>
+<div class="text-right">
+<p class="text-outline text-[10px] uppercase font-bold mb-2 tracking-widest">Personnes avant</p>
+<p class="text-on-surface font-black text-2xl">4 clients</p>
+</div>
+</div>
+<div class="mt-14 w-full flex flex-col gap-4">
+<button class="w-full py-6 bg-primary text-white rounded-full font-headline font-extrabold text-xl flex items-center justify-center gap-3 shadow-lg shadow-primary/30 active:scale-95 transition-all">
+<span class="material-symbols-outlined" data-icon="print">print</span>
+                                Imprimer le ticket
+                            </button>
+<button class="w-full py-5 bg-surface-container-low text-primary rounded-full font-extrabold text-sm uppercase tracking-widest border border-outline-variant/30 active:scale-95 transition-all" onclick="location.reload()">
+                                Retour au menu
+                            </button>
+</div>
+</div>
+<!-- Ticket Footer (Mock perforation) -->
+<div class="w-full h-8 bg-surface-container-highest/30 relative overflow-hidden">
+<div class="absolute -bottom-4 left-0 right-0 flex justify-between px-3">
+<div class="w-8 h-8 bg-white rounded-full shadow-inner"></div>
+<div class="w-8 h-8 bg-white rounded-full shadow-inner"></div>
+<div class="w-8 h-8 bg-white rounded-full shadow-inner"></div>
+<div class="w-8 h-8 bg-white rounded-full shadow-inner"></div>
+<div class="w-8 h-8 bg-white rounded-full shadow-inner"></div>
+<div class="w-8 h-8 bg-white rounded-full shadow-inner"></div>
+<div class="w-8 h-8 bg-white rounded-full shadow-inner"></div>
+<div class="w-8 h-8 bg-white rounded-full shadow-inner"></div>
+</div>
+</div>
+</div>
+<p class="mt-12 text-on-surface font-semibold text-lg max-w-md text-center">
+                    Merci de patienter. Un agent vous appellera dès qu'un guichet sera disponible.
+                </p>
+</div>
+</main>
+<!-- Footer Section -->
+<footer class="h-24 bg-white border-t border-surface-container px-16 flex items-center justify-between">
+<div class="flex items-center gap-10">
+<div class="flex items-center gap-3 text-outline">
+<span class="material-symbols-outlined text-2xl text-primary" data-icon="language">language</span>
+<span class="font-bold text-sm uppercase tracking-wider">Français</span>
+</div>
+<div class="flex items-center gap-3 text-outline">
+<span class="material-symbols-outlined text-2xl text-primary" data-icon="verified_user">verified_user</span>
+<span class="font-bold text-sm uppercase tracking-wider">Session Sécurisée</span>
+</div>
+</div>
+<div class="flex items-center gap-4 text-on-surface font-bold text-sm uppercase tracking-wider">
+<span class="material-symbols-outlined text-primary" data-icon="contact_support">contact_support</span>
+<span>Besoin d'aide ? Appelez un conseiller</span>
+</div>
+</footer>
+</div>
+<script>
+        // Simulate click to show ticket
+        document.querySelectorAll('.kiosk-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById('service-grid').classList.add('opacity-0', 'pointer-events-none', 'transition-opacity', 'duration-300');
+                document.getElementById('ticket-view').classList.remove('hidden');
+                document.getElementById('ticket-view').classList.add('animate-fade-in');
+            });
+        });
+    </script>
+<style>
+    @keyframes ticket-pop {
+        0% { transform: translateY(40px) scale(0.95); opacity: 0; }
+        100% { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    .animate-ticket-pop {
+        animation: ticket-pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+</style>
+</body></html>

@@ -1,457 +1,600 @@
 # Audit Technique — Vista Gui
-*Généré le 2026-05-01 · Audit complet du code source*
+*Généré le 2026-05-09 · Audit complet du code source par analyse statique*
 
 ---
 
 ## Table des matières
 
 1. [Vue d'ensemble](#1-vue-densemble)
-2. [Architecture](#2-architecture)
-3. [Portails & Pages](#3-portails--pages)
-4. [API Routes](#4-api-routes)
-5. [Hooks & State Management](#5-hooks--state-management)
-6. [Sécurité](#6-sécurité)
-7. [Base de données & Persistence](#7-base-de-données--persistence)
-8. [Points forts](#8-points-forts)
-9. [Points faibles & Dettes techniques](#9-points-faibles--dettes-techniques)
-10. [Roadmap recommandée](#10-roadmap-recommandée)
-11. [Checklist de suivi](#11-checklist-de-suivi)
+2. [Architecture réelle](#2-architecture-réelle)
+3. [BUGS CRITIQUES — à corriger en priorité](#3-bugs-critiques)
+4. [BUGS MOYENS](#4-bugs-moyens)
+5. [BUGS MINEURS & UX](#5-bugs-mineurs--ux)
+6. [État réel des portails](#6-état-réel-des-portails)
+7. [API Routes](#7-api-routes)
+8. [Hooks & State](#8-hooks--state)
+9. [Sécurité](#9-sécurité)
+10. [Roadmap priorisée](#10-roadmap-priorisée)
 
 ---
 
 ## 1. Vue d'ensemble
 
-**Vista Gui** est un système de gestion de file d'attente bancaire multi-rôles. L'application est opérationnelle avec un backend Firebase réel (Auth + Firestore) et des pages principales fonctionnelles.
-
 | Métrique | Valeur |
 |---|---|
-| Framework | Next.js 15.4.9 — App Router |
-| UI | React 19.2 · Tailwind CSS 4.1 · Framer Motion 12 |
-| Backend | Firebase Admin SDK 13 · Firestore · Firebase Auth |
+| Framework | Next.js 15 — App Router |
+| UI | React 19 · Tailwind CSS 4 · Framer Motion |
+| Backend | **Supabase** (Auth + Postgres) — *PAS Firebase* |
+| Client DB | `@supabase/ssr` (browser) · `@supabase/supabase-js` (admin) |
 | State global | Zustand 5 |
 | Validation | Zod 4 |
-| Langage | TypeScript 5.9 strict |
-| Complétion globale estimée | ~60 % |
+| Langage | TypeScript 5 strict |
+| Rafraîchissement data | **Polling toutes les 3s** (pas de Realtime Supabase) |
+
+> ⚠️ **L'audit précédent (2026-05-01) mentionnait Firebase partout — c'est FAUX. Le code utilise exclusivement Supabase.**
 
 ---
 
-## 2. Architecture
-
-### Stack technique
+## 2. Architecture réelle
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                         Client                              │
-│   React 19 · Tailwind 4 · Framer Motion · Zustand          │
-│   Hooks Firestore (temps réel) · Web Speech API            │
-└────────────────────────┬────────────────────────────────────┘
-                         │ HTTP / Firestore SDK
-┌────────────────────────▼────────────────────────────────────┐
-│                   Next.js API Routes                        │
-│   Firebase Admin SDK · Zod · HMAC-SHA256 cookies           │
-└────────────────────────┬────────────────────────────────────┘
-                         │ Firebase Admin
-┌────────────────────────▼────────────────────────────────────┐
-│                      Firebase                               │
-│   Auth (email/password) · Firestore · Realtime Database    │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│                      Client                          │
+│  React 19 · Hooks Supabase (polling 3s) · Zustand   │
+│  Web Speech API (TV)                                 │
+└────────────────────┬────────────────────────────────┘
+                     │ fetch() → Next.js API Routes
+┌────────────────────▼────────────────────────────────┐
+│            Next.js API Routes (serveur)              │
+│  adminSupabase (service_role, bypasse RLS)           │
+│  Zod · HMAC-SHA256 cookies                          │
+└────────────────────┬────────────────────────────────┘
+                     │ supabase-admin SDK
+┌────────────────────▼────────────────────────────────┐
+│                   Supabase                           │
+│  Auth (email/password) · PostgreSQL · RLS            │
+└─────────────────────────────────────────────────────┘
 ```
 
-### Portails et rôles
-
-| Portail | Route | Rôle Firebase | État |
-|---|---|---|---|
-| Borne (Kiosk) | `/borne` | `borne` | ✅ Complet |
-| Affichage TV | `/tv` | (public) | ✅ Complet |
-| Caissier | `/caissier` | `caissier` | ✅ Principal complet, sous-pages stub |
-| Superviseur | `/superviseur` | `superviseur` | ✅ Dashboard complet, sous-pages partielles |
-| Admin | `/admin` | `admin` | ✅ Dashboard complet, sous-pages stub |
-
-### Flux de données
+### Cycle de vie d'un ticket (FLUX ATTENDU)
 
 ```
-Firestore (temps réel)
-    ↓  (useTickets / useGuichets / useAlertes)
-Composants React
-    ↓  (actions utilisateur)
-API Routes Next.js  →  Firebase Admin SDK  →  Firestore
+Borne génère ticket  →  statut: "attente"
+                              ↓
+Caissier clique "Appeler le suivant"  →  statut: "en_cours" + guichetId assigné
+                              ↓
+TV affiche le ticket en héro + annonce vocale
+                              ↓
+Caissier termine  →  statut: "termine"  (ou "transfere" / "annule")
 ```
 
-### Cycle de vie d'un ticket
+> ⚠️ **Un ticket en "attente" n'apparaît PAS dans le héro rouge de la TV.**
+> Il apparaît uniquement dans la section "Prochains Billets" (liste basse).
+> Le héro n'affiche que le ticket en `en_cours` — c'est-à-dire après que le caissier ait cliqué "Appeler le suivant".
 
+---
+
+## 3. BUGS CRITIQUES
+
+### 🔴 BUG-01 — TV vide : règles RLS Supabase bloquent les lectures anonymes
+
+**Fichiers concernés :** `app/tv/page.tsx`, `hooks/useTickets.ts`, `hooks/useGuichets.ts`
+
+**Symptôme :** Le ticket généré depuis la borne n'apparaît ni dans "Prochains Billets" ni dans le héro de la TV, même après plusieurs secondes.
+
+**Cause racine :**
+La page `/tv` n'est pas protégée par le middleware (pas de cookie de session requis). Les hooks `useTickets` et `useGuichets` appellent Supabase avec la clé **ANON** (`NEXT_PUBLIC_SUPABASE_ANON_KEY`) sans JWT d'authentification.
+
+Si les règles RLS de Supabase exigent `auth.role() = 'authenticated'` pour lire les tables `tickets` et `guichets`, toutes les requêtes retournent un tableau vide `[]` **sans aucun message d'erreur visible dans l'UI**. L'utilisateur voit juste "Aucun ticket en attente" et "—" dans le héro.
+
+**Comment diagnostiquer :**
+1. Ouvrir la console du navigateur sur `/tv`
+2. Chercher des erreurs Supabase avec `code: "42501"` (permission denied) ou des réponses vides
+3. Aller dans **Supabase Dashboard → Authentication → Policies**
+4. Vérifier si les tables `tickets` et `guichets` ont des policies `SELECT` pour le rôle `anon`
+
+**Correction — à appliquer dans Supabase Dashboard → SQL Editor :**
+
+```sql
+-- Autoriser la lecture anonyme pour l'affichage TV
+CREATE POLICY "TV lecture publique tickets"
+  ON tickets FOR SELECT
+  TO anon
+  USING (true);
+
+CREATE POLICY "TV lecture publique guichets"
+  ON guichets FOR SELECT
+  TO anon
+  USING (true);
 ```
-attente → en_cours → termine
-              ↘ transfere / annule
+
+---
+
+### 🔴 BUG-02 — Guichet non libéré après transfert de ticket
+
+**Fichiers concernés :** `app/caissier/page.tsx:88-112`, `app/api/tickets/[id]/route.ts:39-64`
+
+**Symptôme :** Après un transfert, le caissier voit toujours l'ancien ticket affiché dans son interface. Le guichet reste "occupé" et le bouton "Appeler le suivant" reste bloqué car le guichet a toujours un `ticket_en_cours`.
+
+**Cause racine :**
+`handleConfirmTransfer` envoie `statut: "transfere"` mais dans l'API PATCH `/api/tickets/[id]`, seul le cas `"termine"` libère le guichet en mettant `ticket_en_cours → null`. Le cas `"transfere"` n'est pas géré.
+
+```typescript
+// app/api/tickets/[id]/route.ts — LE PROBLÈME
+if (data.statut === "termine") {
+  // ✅ Libère le guichet correctement
+  await adminSupabase
+    .from("guichets")
+    .update({ ticket_en_cours: null, updated_at: now })
+    .eq("id", guichetId)
+}
+// ❌ Aucun bloc pour "transfere" → le guichet garde l'ancien ticket indéfiniment
 ```
 
-Lors de la transition `en_cours` : le guichet est mis à jour, `appelleAt` est enregistré.
-Lors de `termine` : `tempsService` et `tempsAttente` sont calculés automatiquement côté serveur.
+**Correction à appliquer dans `app/api/tickets/[id]/route.ts` (après le bloc "termine") :**
+
+```typescript
+if (data.statut === "transfere") {
+  const guichetId = (data.guichetId ?? ticket.guichet_id) as string | undefined
+  if (guichetId) {
+    await adminSupabase
+      .from("guichets")
+      .update({ ticket_en_cours: null, updated_at: now })
+      .eq("id", guichetId)
+  }
+}
+```
 
 ---
 
-## 3. Portails & Pages
+### 🔴 BUG-03 — Impossible de vider la liste `servicesAutorises` d'un caissier
 
-### 3.1 Borne client (`/borne`)
+**Fichier concerné :** `app/api/users/[id]/route.ts:34-36`
 
-**Fichier :** `app/borne/page.tsx`
+**Symptôme :** Un admin désélectionne tous les services d'un caissier dans le formulaire et clique "Enregistrer". Les services restent inchangés en base de données.
 
-**Fonctionnalités implémentées :**
-- ✅ Grille de sélection des services (chargée dynamiquement depuis `/api/public/services`)
-- ✅ Sélection de priorité : Standard, VIP, Femme Enceinte, Personne Âgée, Handicap/Urgence
-- ✅ Génération de ticket via POST `/api/public/tickets`
-- ✅ Affichage du ticket avec code-barres décoratif
-- ✅ Bouton d'impression (`window.print()` + CSS `@media print`)
-- ✅ Horloge temps réel
-- ✅ Déconnexion avec mise à jour de présence Firestore
+**Cause racine :**
 
-**Améliorations appliquées :**
-- CSS `@page { size: 80mm auto; margin: 0; }` pour impression thermique propre
+```typescript
+// app/api/users/[id]/route.ts — LE PROBLÈME
+if (data.servicesAutorises !== undefined && data.servicesAutorises.length > 0)
+  updates.services_autorises = data.servicesAutorises
+// ❌ Si servicesAutorises = [], la condition "length > 0" est false
+// → la mise à jour est ignorée silencieusement
+```
 
----
+**Correction :**
 
-### 3.2 Affichage TV (`/tv`)
-
-**Fichier :** `app/tv/page.tsx`
-
-**Fonctionnalités implémentées :**
-- ✅ Affichage du ticket appelé en grand (hero rouge)
-- ✅ Annonce vocale en français (Web Speech API) — double annonce avec 1,2 s de pause
-- ✅ Sélection automatique de voix Google fr-FR pour une meilleure qualité
-- ✅ 4 prochains tickets en attente
-- ✅ Historique des 4 derniers appels avec heure relative
-- ✅ Fil d'actualité défilant en pied de page
-- ✅ Bouton plein écran discret (coin inférieur droit)
-- ✅ Horloge et date en temps réel
+```typescript
+if (data.servicesAutorises !== undefined)
+  updates.services_autorises = data.servicesAutorises
+// ✅ Un tableau vide [] sera maintenant appliqué
+```
 
 ---
 
-### 3.3 Caissier (`/caissier`)
+### 🔴 BUG-04 — `terminesAujourdhui` compte toute l'historique, pas uniquement aujourd'hui
 
-**Fichier principal :** `app/caissier/page.tsx`
+**Fichier concerné :** `hooks/useStats.ts:16`
 
-**Fonctionnalités implémentées :**
-- ✅ Affichage du ticket en cours (grand)
-- ✅ Bouton "Appeler le suivant" — PATCH `/api/tickets/[id]` statut `en_cours`
-- ✅ Actions : Pause guichet, Transfert (modal service), Terminer
-- ✅ Aperçu des 3 prochains tickets
-- ✅ Stats journalières (clients servis, temps moyen de service)
-- ✅ Modal de transfert avec sélection de service
+**Symptôme :** Le compteur "Clients servis" affiché sur le dashboard caissier et superviseur affiche le total historique de TOUS les tickets terminés depuis la création de la base de données, pas ceux du jour en cours.
 
-**Sous-pages (stubs — non implémentées) :**
-- ❌ `/caissier/file-attente` — Liste complète de la file
-- ❌ `/caissier/historique` — Historique des tickets traités
-- ❌ `/caissier/assistance` — Demande d'assistance superviseur
+**Cause racine :**
 
----
+```typescript
+// hooks/useStats.ts — LE PROBLÈME
+const terminesAujourdhui = tickets.filter((t) => t.statut === "termine").length
+// ❌ Aucun filtre de date — compte tout l'historique depuis le début
+```
 
-### 3.4 Superviseur (`/superviseur`)
+**Correction :**
 
-**Fichier principal :** `app/superviseur/page.tsx`
-
-**Fonctionnalités implémentées :**
-- ✅ KPIs temps réel : en attente, temps moyen d'attente, guichets actifs, alertes actives
-- ✅ Tableau "Flux par Service" (file, attente max, taux complétion)
-- ✅ Sidebar alertes actives (3 dernières avec lien vers toutes)
-- ✅ Indicateur de statut temps réel
-
-**Sous-pages :**
-- ✅ `/superviseur/rapports` — KPIs, graphiques, tableau performances guichets + bouton téléchargement PDF
-- ❌ `/superviseur/alertes` — Gestion complète des alertes (stub)
-- ❌ `/superviseur/files-attente` — Vue détaillée des files (stub)
-- ❌ `/superviseur/guichets` — Statut guichets (stub)
+```typescript
+const todayStart = new Date()
+todayStart.setHours(0, 0, 0, 0)
+const terminesAujourdhui = tickets.filter((t) =>
+  t.statut === "termine" &&
+  new Date(t.createdAt) >= todayStart
+).length
+```
 
 ---
 
-### 3.5 Admin (`/admin`)
+### 🔴 BUG-05 — `useStats` charge TOUS les tickets terminés sans limite ni date
 
-**Fichier principal :** `app/admin/page.tsx`
+**Fichier concerné :** `hooks/useStats.ts:8-11`
 
-**Fonctionnalités implémentées :**
-- ✅ Dashboard avec KPIs (clients, attente moyenne, taux service, guichets ouverts)
-- ✅ Tableau statut guichets
-- ✅ Résumé d'activité
+**Symptôme :** En production après quelques semaines, la page superviseur et caissier va charger des milliers de tickets terminés depuis le début, toutes les 3 secondes. Risque de freeze navigateur et saturation réseau.
 
-**Sous-pages (stubs — non implémentées) :**
-- ❌ `/admin/utilisateurs` — CRUD utilisateurs (API prête, UI manquante)
-- ❌ `/admin/services` — CRUD services (API prête, UI manquante)
-- ❌ `/admin/guichets` — CRUD guichets (API prête, UI manquante)
-- ❌ `/admin/parametres` — Paramètres agence (API prête, UI manquante)
+**Cause racine :**
 
----
+```typescript
+// hooks/useStats.ts — LE PROBLÈME
+const { tickets } = useTickets({
+  statut: ["attente", "en_cours", "termine"],
+  // ❌ "termine" sans filtre de date = toute l'histoire de la DB
+})
+```
 
-### 3.6 Authentification (`/login`)
-
-- ✅ Formulaire email/password
-- ✅ Firebase sign-in + session cookie HMAC
-- ✅ Redirection par rôle
-- ✅ Gestion d'erreurs Firebase (compte désactivé, mauvais mdp, etc.)
+**Correction :** Ajouter un paramètre `dateFrom` dans `useTickets` et filtrer à aujourd'hui, ou ne charger les tickets terminés que pour les calculs de statistiques avec une requête dédiée limitée.
 
 ---
 
-## 4. API Routes
+## 4. BUGS MOYENS
 
-### Auth
+### 🟡 BUG-06 — Polling 3s au lieu de Supabase Realtime
 
-| Route | Méthode | Rôle requis | Description |
-|---|---|---|---|
-| `/api/auth/login` | POST | — | Sign-in Firebase + création session cookie |
-| `/api/auth/logout` | POST | — | Suppression cookies + marquage hors-ligne |
+**Fichiers concernés :** Tous les hooks dans `hooks/`
+
+**Symptôme :** Les mises à jour sur la TV, le caissier et le superviseur ont une latence pouvant aller jusqu'à 3 secondes. Sur la page superviseur, cela génère simultanément 5+ intervals de polling, soit environ 5 requêtes HTTP vers Supabase toutes les 3 secondes par onglet ouvert.
+
+**Cause :** Tous les hooks utilisent `setInterval(fetchXxx, 3000)` au lieu des subscriptions Realtime de Supabase.
+
+```typescript
+// Actuel (tous les hooks) — inefficace
+const interval = setInterval(fetchTickets, 3000)
+
+// Idéal avec Supabase Realtime — quasi-instantané, zéro polling
+const channel = supabase
+  .channel('tickets-changes')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, fetchTickets)
+  .subscribe()
+```
+
+---
+
+### 🟡 BUG-07 — Priorité des tickets complètement ignorée dans la file d'attente
+
+**Fichier concerné :** `app/caissier/page.tsx:39-51`, `hooks/useTickets.ts:22`
+
+**Symptôme :** Un ticket VIP ou Handicap arrivé après un ticket Standard sera servi APRÈS le Standard. La priorité choisie à la borne est stockée en base mais n'a aucun effet sur l'ordre de traitement.
+
+**Cause :** La file est triée uniquement par `created_at` (FIFO strict). Le caissier prend toujours `attenteTickets[0]`, le plus ancien indépendamment de sa priorité.
+
+```typescript
+// hooks/useTickets.ts
+let q = supabase.from("tickets").select("*").order("created_at", { ascending: true })
+// ❌ Aucun tri par priorité
+
+// app/caissier/page.tsx
+const prochainTicket = attenteTickets[0] // ❌ Toujours le plus ancien
+```
+
+**Correction proposée :** Définir un ordre de priorité explicite et trier côté client :
+
+```typescript
+const PRIORITY_ORDER: Record<string, number> = {
+  handicap: 1, enceinte: 2, age: 3, vip: 4, standard: 5
+}
+const prochainTicket = [...attenteTickets].sort(
+  (a, b) => (PRIORITY_ORDER[a.priorite] ?? 5) - (PRIORITY_ORDER[b.priorite] ?? 5)
+    || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+)[0]
+```
+
+---
+
+### 🟡 BUG-08 — `handleDelete` (services et utilisateurs) sans feedback d'erreur
+
+**Fichiers concernés :** `app/admin/services/page.tsx:119-122`, `app/admin/utilisateurs/page.tsx:151-155`
+
+**Symptôme :** Si la suppression échoue côté serveur (contrainte FK, erreur réseau, etc.), l'UI ne montre rien. L'élément disparaît visuellement pendant 3 secondes le temps du polling, puis réapparaît. L'utilisateur croit avoir réussi.
+
+**Cause :**
+
+```typescript
+// admin/services/page.tsx — LE PROBLÈME
+const handleDelete = async (serviceId: string) => {
+  if (!confirm('Supprimer ce service ?')) return;
+  await fetch(`/api/services/${serviceId}`, { method: 'DELETE' });
+  // ❌ Pas de vérification de res.ok, pas de setError()
+};
+```
+
+---
+
+### 🟡 BUG-09 — `handleToggleActif` (services) sans feedback d'erreur
+
+**Fichier concerné :** `app/admin/services/page.tsx:111-117`
+
+```typescript
+const handleToggleActif = async (serviceId: string, actif: boolean) => {
+  await fetch(`/api/services/${serviceId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ actif: !actif }),
+  });
+  // ❌ Aucun traitement si res.ok === false
+};
+```
+
+---
+
+### 🟡 BUG-10 — `admin/guichets` : liste des caissiers chargée une seule fois
+
+**Fichier concerné :** `app/admin/guichets/page.tsx:43-51`
+
+**Symptôme :** Si un caissier vient d'être créé depuis `admin/utilisateurs` sans recharger la page `admin/guichets`, il n'apparaît pas dans le select "Caissier assigné" du formulaire guichet.
+
+**Cause :** La liste des caissiers est récupérée une seule fois au mount du composant, sans polling ni refresh après mutation.
+
+```typescript
+useEffect(() => { fetchCaissiers(); }, [fetchCaissiers]);
+// ❌ Chargé une fois, jamais mis à jour automatiquement
+```
+
+---
+
+### 🟡 BUG-11 — Double instance `useTickets` sur la page superviseur
+
+**Fichier concerné :** `app/superviseur/page.tsx:23-25`
+
+**Symptôme :** La page superviseur déclenche 2 instances de `useTickets` qui tournent en parallèle, doublant les requêtes inutilement :
+- Via `useStats()` → `useTickets(["attente", "en_cours", "termine"])`
+- Via `useTickets({ statut: "attente" })` directement dans le composant pour `fluxServices`
+
+La donnée `enAttente` est déjà calculée dans `stats.enAttente`. La deuxième instance est redondante.
+
+---
+
+### 🟡 BUG-12 — Middleware : fallback dev sans vérification HMAC
+
+**Fichier concerné :** `middleware.ts:13-17`
+
+```typescript
+if (!secret) {
+  // No secret configured — accept plain role cookie (dev fallback)
+  return (value as UserRole) || null
+}
+```
+
+**Risque :** Sans `COOKIE_SECRET` configuré, n'importe qui peut définir `__role=admin` manuellement dans ses cookies navigateur et accéder à toutes les routes admin sans authentification. Le `.env.local` actuel a bien `COOKIE_SECRET` configuré — OK pour ce projet. Mais dangereux si le projet est déployé sans ce fichier.
+
+---
+
+## 5. BUGS MINEURS & UX
+
+### 🟢 BUG-13 — Pas de feedback succès lors de la création/modification d'utilisateur
+
+**Fichier concerné :** `app/admin/utilisateurs/page.tsx`
+
+Après création ou modification, le modal se ferme silencieusement. Contrairement à `admin/services/page.tsx` qui affiche un toast vert de confirmation (`setSuccess(...)`) pendant 4 secondes, `admin/utilisateurs` ne confirme visuellement rien. L'utilisateur ne sait pas si ça a marché.
+
+---
+
+### 🟢 BUG-14 — `ordre` des services non garanti à la création
+
+**Fichier concerné :** `app/admin/services/page.tsx:62`
+
+```typescript
+ordre: services.length,
+// ❌ Si des services ont été supprimés ou si 2 créations simultanées,
+// l'ordre peut être dupliqué ou incohérent
+```
+
+---
+
+### 🟢 BUG-15 — TV charge tous les tickets "termine" sans limite
+
+**Fichier concerné :** `app/tv/page.tsx:32`
+
+```typescript
+const { tickets: terminesTickets } = useTickets({ statut: "termine" })
+// ❌ Sans .limit() ni filtre de date — en production, charge l'intégralité
+// de l'historique alors que seuls les 4 derniers sont affichés
+```
+
+---
+
+### 🟢 BUG-16 — `tempsMoyenService` affiché avec conversion fragile
+
+**Fichier concerné :** `app/caissier/page.tsx:219`
+
+```typescript
+{stats.tempsMoyenService > 0 ? formatDuration(stats.tempsMoyenService * 60) : '—'}
+```
+
+`stats.tempsMoyenService` est déjà en **minutes** (divisé par 60 dans `useStats`), mais `formatDuration` attend des **secondes**. Le `* 60` reconvertit en secondes. Correct aujourd'hui, mais si `useStats` change son unité ce bug sera silencieux.
+
+---
+
+### 🟢 BUG-17 — Connexion "Problème de connexion ?" non implémentée
+
+**Fichier concerné :** `app/login/page.tsx:194-196`
+
+```typescript
+<button className="text-xs text-slate-400 ...">
+  Problème de connexion ?
+</button>
+// ❌ Bouton sans onClick — afficher de l'aide ou un contact admin
+```
+
+---
+
+## 6. État réel des portails
+
+| Portail | Route | État réel |
+|---|---|---|
+| Borne | `/borne` | ✅ Complet — génération ticket Supabase, impression, logout |
+| TV Affichage | `/tv` | ⚠️ Complet UI mais dépend des règles RLS anon **(BUG-01)** |
+| Caissier | `/caissier` | ✅ Fonctionnel — BUG-02 (transfert bloque guichet) à corriger |
+| Superviseur | `/superviseur` | ✅ Dashboard complet et fonctionnel |
+| Admin Vue d'ensemble | `/admin` | ✅ Dashboard complet |
+| Admin Utilisateurs | `/admin/utilisateurs` | ✅ CRUD complet et opérationnel |
+| Admin Services | `/admin/services` | ✅ CRUD complet et opérationnel |
+| Admin Guichets | `/admin/guichets` | ✅ CRUD complet et opérationnel |
+| Admin Paramètres | `/admin/parametres` | ✅ Formulaire complet et opérationnel |
+| Login | `/login` | ✅ Supabase Auth + session cookie HMAC |
+
+### Sous-pages non implémentées (stubs)
+
+| Page | État |
+|---|---|
+| `/caissier/file-attente` | ❌ Stub vide |
+| `/caissier/historique` | ❌ Stub vide |
+| `/caissier/assistance` | ❌ Stub vide |
+| `/superviseur/alertes` | ❌ Stub vide |
+| `/superviseur/files-attente` | ❌ Stub vide |
+| `/superviseur/guichets` | ❌ Stub vide |
+| `/superviseur/rapports` | ✅ Implémenté |
+
+---
+
+## 7. API Routes
 
 ### Tickets
 
-| Route | Méthode | Rôles | Description |
+| Route | Méthode | Rôles requis | Notes |
 |---|---|---|---|
-| `/api/tickets` | GET | admin, superviseur, caissier | Liste tickets avec filtres (statut, service, guichet) |
-| `/api/tickets` | POST | admin, caissier | Créer ticket (incrémente compteur journalier) |
+| `/api/public/tickets` | POST | — (public) | Borne — appelle la RPC `next_ticket_numero` |
+| `/api/tickets` | GET | admin, superviseur, caissier | Filtres: `statut`, `serviceCode` |
+| `/api/tickets` | POST | admin, caissier | Identique à la route publique |
 | `/api/tickets/[id]` | GET | auth | Ticket unique |
-| `/api/tickets/[id]` | PATCH | auth | Changer statut + calculs temps auto |
-| `/api/tickets/[id]` | DELETE | admin | Supprimer ticket |
+| `/api/tickets/[id]` | PATCH | auth | Calculs temps auto — **BUG-02 : "transfere" ne libère pas le guichet** |
+| `/api/tickets/[id]` | DELETE | admin | OK |
 
 ### Guichets
 
-| Route | Méthode | Rôles | Description |
+| Route | Méthode | Rôles requis | Notes |
 |---|---|---|---|
-| `/api/guichets` | GET | auth | Liste tous les guichets |
-| `/api/guichets` | POST | admin | Créer guichet (validation unicité) |
-| `/api/guichets/[id]` | PATCH | auth | Mettre à jour guichet |
-| `/api/guichets/[id]` | DELETE | admin | Supprimer guichet |
+| `/api/guichets` | GET | auth | OK |
+| `/api/guichets` | POST | admin | Vérif unicité numéro + caissierUid |
+| `/api/guichets/[id]` | PATCH | auth | OK |
+| `/api/guichets/[id]` | DELETE | admin | OK |
 
 ### Services
 
-| Route | Méthode | Rôles | Description |
+| Route | Méthode | Rôles requis | Notes |
 |---|---|---|---|
-| `/api/services` | GET | auth | Liste services |
-| `/api/services` | POST | admin | Créer service (code unique) |
-| `/api/services/[id]` | PATCH | admin | Mettre à jour service |
-| `/api/services/[id]` | DELETE | admin | Supprimer service |
+| `/api/public/services` | GET | — (public) | Retourne uniquement les services actifs |
+| `/api/services` | GET | auth | Tous les services |
+| `/api/services` | POST | admin | Vérif unicité code |
+| `/api/services/[id]` | PATCH | admin | OK |
+| `/api/services/[id]` | DELETE | admin | OK |
 
 ### Utilisateurs
 
-| Route | Méthode | Rôles | Description |
+| Route | Méthode | Rôles requis | Notes |
 |---|---|---|---|
-| `/api/users` | GET | admin | Liste utilisateurs |
-| `/api/users` | POST | admin | Créer utilisateur (Firebase Auth + Firestore) |
-| `/api/users/[id]` | GET | admin | Utilisateur unique |
-| `/api/users/[id]` | PATCH | admin | Mise à jour (cascade : statut → désactive auth Firebase) |
-| `/api/users/[id]` | DELETE | admin | Supprime utilisateur + compte Firebase Auth |
+| `/api/users` | GET | admin | OK |
+| `/api/users` | POST | admin | Crée Supabase Auth + profil DB — rollback Auth si DB échoue |
+| `/api/users/[id]` | GET | admin | OK |
+| `/api/users/[id]` | PATCH | admin | **BUG-03 : servicesAutorises=[] ignoré** · Cascade statut→guichet |
+| `/api/users/[id]` | DELETE | admin | Supprime Auth + profil DB |
 
 ### Alertes
 
-| Route | Méthode | Rôles | Description |
+| Route | Méthode | Rôles requis | Notes |
 |---|---|---|---|
-| `/api/alertes` | GET | admin, superviseur | Liste alertes (filtre `resolue`) |
-| `/api/alertes` | POST | auth | Créer alerte |
-| `/api/alertes/[id]` | PATCH | admin, superviseur | Résoudre alerte |
+| `/api/alertes` | GET | admin, superviseur | Filtre optionnel `?resolue=true/false` |
+| `/api/alertes` | POST | auth | OK |
+| `/api/alertes/[id]` | PATCH | admin, superviseur | Résolution d'alerte |
 
-### Paramètres & Public
+### Auth & Divers
 
-| Route | Méthode | Rôles | Description |
-|---|---|---|---|
-| `/api/parametres` | GET | auth | Paramètres agence |
-| `/api/parametres` | PATCH | admin | Mettre à jour paramètres |
-| `/api/public/services` | GET | — | Services actifs (borne, sans auth) |
-| `/api/public/tickets` | POST | — | Créer ticket depuis borne (sans auth) |
-| `/api/cron/alertes` | POST | CRON_SECRET | Job automatisé : génère alertes si seuils dépassés |
-
----
-
-## 5. Hooks & State Management
-
-### Hooks Firestore (temps réel)
-
-| Hook | Fichier | Écoute | Description |
-|---|---|---|---|
-| `useAuth` | `hooks/useAuth.ts` | Firebase Auth | Session utilisateur + présence Firestore + auto-logout si statut=inactif |
-| `useTickets` | `hooks/useTickets.ts` | `tickets` collection | Tickets avec filtres (statut, serviceCode, guichetId) |
-| `useGuichets` | `hooks/useGuichets.ts` | `guichets` collection | Tous les guichets triés par numéro |
-| `useServices` | `hooks/useServices.ts` | `services` collection | Services (option actifs uniquement) |
-| `useAlertes` | `hooks/useAlertes.ts` | `alertes` collection | Alertes filtrables par `resolue` |
-| `useStats` | `hooks/useStats.ts` | Dérivé de tickets + guichets | KPIs calculés côté client |
-| `useUsersPresence` | `hooks/useUsersPresence.ts` | `presence` collection | Présence temps réel des utilisateurs |
-
-### State global
-
-| Store | Fichier | Contenu |
+| Route | Méthode | Notes |
 |---|---|---|
-| `authStore` | `store/authStore.ts` | `user: SessionUser \| null` · `loading: boolean` |
-
-### Utilitaires
-
-| Fichier | Rôle |
-|---|---|
-| `lib/utils.ts` | `cn()` — fusion classes Tailwind (clsx + tailwind-merge) |
-| `lib/api-helpers.ts` | `ok()`, `err()`, `withAuth()`, `handleZodError()` |
-| `lib/validations.ts` | Schémas Zod pour toutes les entités |
-| `lib/auth.ts` | `createSession()`, `getSession()`, `clearSession()`, `requireAuth()` |
-| `lib/firebase.ts` | Client SDK : `auth`, `db` (Firestore), `rtdb` (Realtime DB) |
-| `lib/firebase-admin.ts` | Admin SDK (server-side) |
+| `/api/auth/login` | POST | `createSession()` — vérifie Supabase Auth + crée cookies HMAC |
+| `/api/auth/logout` | POST | `clearSession()` — supprime les cookies |
+| `/api/parametres` | GET / PATCH | auth / admin |
+| `/api/cron/alertes` | POST | Protégé par `CRON_SECRET` en header Authorization |
 
 ---
 
-## 6. Sécurité
+## 8. Hooks & State
 
-### Authentification
-
-- Firebase Auth (email/password) côté client
-- Session cookie `__session` signé HMAC-SHA256 avec `COOKIE_SECRET`
-- Cookie `__role` pour la redirection côté middleware
-- Les cookies sont `httpOnly`, `sameSite: strict`, `secure` (production)
-
-### Autorisation
-
-**Middleware Next.js (`middleware.ts`) :**
-- Vérifie la signature HMAC du cookie `__role` sur chaque requête
-- Redirige vers `/login` si non authentifié
-- Redirige vers le dashboard du rôle si accès à un portail interdit
-
-**API Routes :**
-- Wrapper `withAuth(roles, handler)` → `requireAuth()` → `getSession()` → vérifie le rôle
-- Toutes les routes protégées sont validées côté serveur (pas de confiance sur le client)
-
-### Validation des entrées
-
-- Tous les corps de requête sont validés avec Zod avant traitement
-- `handleZodError()` retourne des messages d'erreur clairs sans exposer les internals
-
-### Firestore Security Rules
-
-- Fichier `firestore.rules` présent (contenu à vérifier/durcir avant prod)
-
-### Variables d'environnement
-
-| Variable | Usage |
-|---|---|
-| `NEXT_PUBLIC_FIREBASE_*` | SDK client (exposé au navigateur — normal) |
-| `FIREBASE_ADMIN_*` | SDK admin (serveur uniquement) |
-| `COOKIE_SECRET` | Signature HMAC cookies |
-| `CRON_SECRET` | Authentification du job cron |
-| `GEMINI_API_KEY` | (optionnel) IA générative |
-
----
-
-## 7. Base de données & Persistence
-
-### Collections Firestore
-
-| Collection | Documents | Description |
+| Hook | Méthode de rafraîchissement | Problème identifié |
 |---|---|---|
-| `users` | `{uid}` | Profils utilisateurs (rôle, nom, guichetId, statut) |
-| `tickets` | `{auto-id}` | Tickets avec statut, priorité, timestamps, temps calculés |
-| `guichets` | `{auto-id}` | Guichets avec statut, caissier assigné, ticket en cours |
-| `services` | `{auto-id}` | Services bancaires (code, nom, temps estimé, actif) |
-| `alertes` | `{auto-id}` | Alertes système avec type, sévérité, résolution |
-| `parametres` | `agence` | Configuration agence (seuils, horaires, voix) |
-| `presence` | `{uid}` | Présence en ligne temps réel |
-| `compteurs` | `{service}_{date}` | Compteurs journaliers pour numérotation tickets |
+| `useTickets` | `setInterval(3000)` | BUG-05: charge tous les "termine" sans filtre date |
+| `useGuichets` | `setInterval(3000)` | OK |
+| `useServices` | `setInterval(3000)` | OK |
+| `useAlertes` | `setInterval(3000)` | Peut être bloqué par RLS si non authentifié |
+| `useUsersPresence` | `setInterval(3000)` | OK |
+| `useAuth` | `onAuthStateChange` + polling statut 10s | OK |
+| `useStats` | Dérivé de `useTickets` | BUG-04 + BUG-05 |
+| `useUsers` | Une seule fois au mount + `refresh()` manuel | Pas de temps réel automatique |
 
-### Indexes composites (`firestore.indexes.json`)
+### Pourquoi les hooks client lisent Supabase directement
 
-Indexes définis pour optimiser les requêtes fréquentes (tickets par statut+date, alertes par résolution+date, etc.).
+Les hooks (`useTickets`, `useGuichets`, etc.) accèdent à Supabase via la clé **ANON** avec `createBrowserClient`. Pour les utilisateurs authentifiés via `supabase.auth.signInWithPassword()`, le client gère automatiquement le JWT dans les requêtes, ce qui permet au RLS de fonctionner avec `auth.role() = 'authenticated'`.
 
----
-
-## 8. Points forts
-
-- **Architecture propre** : séparation claire client/serveur, API routes Next.js bien organisées
-- **Temps réel** : Firestore listeners dans tous les hooks → mise à jour instantanée sans polling
-- **Sécurité solide** : HMAC cookies + Firebase Admin + validation Zod à chaque couche
-- **Typage fort** : TypeScript strict, types centralisés dans `lib/types.ts`
-- **Système d'alertes automatisé** : job cron avec 3 règles métier configurables
-- **Multi-rôles fonctionnel** : 5 rôles distincts avec isolation de routes
-- **Voix TV** : annonce double en français avec sélection automatique de la meilleure voix disponible
-- **Impression thermique** : CSS `@page` adapté aux imprimantes 80 mm
+**Exception critique :** La page `/tv` ne passe jamais par le login Supabase. Les requêtes arrivent sans JWT → soumises aux politiques RLS pour le rôle `anon`. Sans policy `SELECT` pour `anon` sur `tickets` et `guichets` → tableaux vides.
 
 ---
 
-## 9. Points faibles & Dettes techniques
+## 9. Sécurité
 
-### Fonctionnel
+### Points forts
 
-| Problème | Impact | Priorité |
+- Cookies `__session` (access token) + `__role` signés HMAC-SHA256 avec `COOKIE_SECRET`
+- `requireAuth()` vérifié côté serveur à chaque appel API
+- Wrapper `withAuth(roles, handler)` protège toutes les routes sensibles
+- Validation Zod sur tous les corps de requête
+- `adminSupabase` (service_role key) utilisé uniquement côté serveur — bypasse RLS légitimement
+- Rollback Supabase Auth si l'insert profil DB échoue (création utilisateur atomique)
+- Cookie `httpOnly`, `secure` en production, `sameSite: lax`
+
+### Points faibles
+
+| Problème | Sévérité | Détail |
 |---|---|---|
-| Pages admin UI manquantes (utilisateurs, services, guichets, paramètres) | Admin ne peut pas gérer l'app via UI | 🔴 Haute |
-| Sous-pages caissier stub (file-attente, historique, assistance) | Fonctionnalités caissier incomplètes | 🟡 Moyenne |
-| Sous-pages superviseur stub (alertes, files-attente, guichets) | Supervision limitée | 🟡 Moyenne |
-| Pas de gestion des erreurs réseau dans les hooks | Silence en cas de problème Firebase | 🟡 Moyenne |
-| Cron non configuré (Vercel / externe) | Alertes automatiques ne se déclenchent pas | 🟡 Moyenne |
-
-### Technique
-
-| Problème | Impact | Priorité |
-|---|---|---|
-| `firestore.rules` à auditer/durcir | Risque sécurité en production | 🔴 Haute |
-| `@google/genai` installé mais non utilisé | Bundle inutilement alourdi | 🟢 Faible |
-| Pas de tests (unitaires, intégration, E2E) | Régressions difficiles à détecter | 🟡 Moyenne |
-| `seed.ts` non documenté | Difficile à utiliser pour nouveaux devs | 🟢 Faible |
-| Pas de rate limiting sur `/api/public/tickets` | Abus possible de la borne | 🟡 Moyenne |
+| Politiques RLS non vérifiées pour anon | 🔴 Haute | Cause principale de la TV vide (BUG-01) |
+| Pas de rate limiting sur routes publiques | 🟡 Moyenne | `/api/public/tickets` peut être spammé depuis la borne |
+| Fallback dev sans HMAC si COOKIE_SECRET absent | 🟡 Moyenne | BUG-12 — risque si déployé sans .env |
+| `.env.local` commité dans git ? | 🔴 À vérifier | Contient des clés Supabase réelles — ne JAMAIS commiter |
 
 ---
 
-## 10. Roadmap recommandée
+## 10. Roadmap priorisée
 
-### Phase 1 — Pages admin UI (priorité haute)
+### Phase 0 — Correctifs bloquants (à faire maintenant)
 
-- [ ] `/admin/utilisateurs` — CRUD complet (formulaire création/édition, tableau, activation/désactivation)
-- [ ] `/admin/services` — Formulaire service + toggle actif/inactif + réordonnancement
-- [ ] `/admin/guichets` — Assignation caissier, changement statut
-- [ ] `/admin/parametres` — Formulaire paramètres agence (seuils, horaires, nom)
+- [ ] **BUG-01** : Créer les policies RLS Supabase `SELECT` pour `anon` sur `tickets` et `guichets` (TV vide)
+- [ ] **BUG-02** : Libérer le guichet quand un ticket est transféré — ajouter le bloc `"transfere"` dans `api/tickets/[id]` PATCH
+- [ ] **BUG-03** : Permettre `servicesAutorises: []` — retirer la condition `&& length > 0`
+- [ ] **BUG-04** : Filtrer `terminesAujourdhui` par date dans `useStats`
 
-### Phase 2 — Sous-pages caissier & superviseur
+### Phase 1 — Qualité & données
 
+- [ ] **BUG-05** : Limiter le chargement des tickets "termine" à la journée en cours
+- [ ] **BUG-07** : Implémenter le tri par priorité dans la file d'attente caissier
+- [ ] **BUG-08/09** : Ajouter gestion d'erreur sur `handleDelete` et `handleToggleActif`
+- [ ] **BUG-10** : Rafraîchir la liste des caissiers dans `admin/guichets` après mutation
+- [ ] **BUG-13** : Ajouter un toast de succès après création/modification d'utilisateur
+
+### Phase 2 — Performance
+
+- [ ] **BUG-06** : Migrer les hooks vers Supabase Realtime (subscriptions `postgres_changes`)
+- [ ] **BUG-11** : Dédupliquer l'instance `useTickets` redondante dans le superviseur
+
+### Phase 3 — Fonctionnalités manquantes
+
+- [ ] `/caissier/file-attente` — Vue complète de la file avec scroll
 - [ ] `/caissier/historique` — Historique paginé des tickets du jour
-- [ ] `/caissier/file-attente` — Vue complète de la file
-- [ ] `/caissier/assistance` — Envoi d'alerte au superviseur
+- [ ] `/caissier/assistance` — Envoi d'alerte superviseur en un clic
 - [ ] `/superviseur/alertes` — Liste complète + résolution d'alertes
 - [ ] `/superviseur/files-attente` — Vue multi-guichets en temps réel
-- [ ] `/superviseur/guichets` — Statut + actions (ouvrir/fermer/pause)
-
-### Phase 3 — Infrastructure
-
-- [ ] Configurer le cron Vercel pour `/api/cron/alertes`
-- [ ] Durcir `firestore.rules` (règles par rôle)
-- [ ] Ajouter rate limiting sur les routes publiques
-- [ ] Tests Playwright E2E sur les flux critiques (ticket → appel → fin)
-
-### Phase 4 — Améliorations UX
-
-- [ ] Notifications push (Firebase Cloud Messaging) pour alertes caissier
-- [ ] Mode sombre pour l'affichage TV
-- [ ] Export Excel en plus du PDF pour les rapports
-- [ ] PWA offline pour la borne
+- [ ] `/superviseur/guichets` — Contrôle statut guichets (ouvrir/fermer/pause)
+- [ ] Rate limiting sur `/api/public/tickets` (anti-spam borne)
+- [ ] Configuration cron Vercel pour `/api/cron/alertes`
+- [ ] Tests Playwright E2E sur le flux critique : génération ticket → appel caissier → TV
 
 ---
 
-## 11. Checklist de suivi
+## Checklist de diagnostic rapide
 
-### Fonctionnalités implémentées
+**Si les tickets ne s'affichent pas sur la TV :**
 
-- [x] Authentification multi-rôles (Firebase Auth + session HMAC)
-- [x] Borne : sélection service + priorité + génération ticket
-- [x] Borne : impression ticket thermique (CSS @page 80mm)
-- [x] TV : affichage ticket appelé en temps réel
-- [x] TV : annonce vocale double en français (Web Speech API)
-- [x] TV : bouton plein écran discret
-- [x] Caissier : appel ticket suivant + actions (terminer, transférer, pause)
-- [x] Superviseur : dashboard KPIs temps réel
-- [x] Superviseur : rapports avec téléchargement PDF
-- [x] Admin : dashboard KPIs + tableau guichets
-- [x] Système d'alertes (3 règles cron)
-- [x] Middleware de protection des routes par rôle
-- [x] API REST complète (tickets, guichets, services, users, alertes, paramètres)
-
-### À faire
-
-- [ ] UI admin : utilisateurs
-- [ ] UI admin : services
-- [ ] UI admin : guichets
-- [ ] UI admin : paramètres
-- [ ] Sous-pages caissier (historique, file-attente, assistance)
-- [ ] Sous-pages superviseur (alertes, files-attente, guichets)
-- [ ] Configuration cron production
-- [ ] Durcissement firestore.rules
-- [ ] Rate limiting routes publiques
-- [ ] Tests automatisés
+1. Ouvrir la **console navigateur** sur `/tv` → chercher des erreurs Supabase `42501` ou des tableaux `[]`
+2. Aller dans **Supabase Dashboard → Table Editor → `tickets`** → tester une lecture en tant qu'anon
+3. Aller dans **Supabase Dashboard → Authentication → Policies** → vérifier si `tickets` et `guichets` ont des policies `SELECT` pour `anon`
+4. Si non : appliquer le SQL du BUG-01
+5. Vérifier que `NEXT_PUBLIC_SUPABASE_URL` et `NEXT_PUBLIC_SUPABASE_ANON_KEY` dans `.env.local` correspondent au projet Supabase actif
+6. Vérifier que la **fonction RPC `next_ticket_numero`** existe dans Supabase (SQL Editor) :
+   ```sql
+   SELECT proname FROM pg_proc WHERE proname = 'next_ticket_numero';
+   ```
+   Si vide → la génération de numéro échoue silencieusement et aucun ticket n'est inséré.
 
 ---
 
-*Audit réalisé par analyse statique du code source — Vista Gui v1.0-beta*
+*Audit réalisé par analyse statique complète du code source — Vista Gui · 2026-05-09*

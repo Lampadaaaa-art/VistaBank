@@ -6,7 +6,6 @@ import { AdminLogoutButton } from '@/components/admin-logout-button';
 import Link from 'next/link';
 import { useStats } from '@/hooks/useStats';
 import { useAlertes } from '@/hooks/useAlertes';
-import { useTickets } from '@/hooks/useTickets';
 import { useServices } from '@/hooks/useServices';
 import { useAuth } from '@/hooks/useAuth';
 function timeAgo(ts: string): string {
@@ -19,10 +18,14 @@ function timeAgo(ts: string): string {
 
 export default function Superviseur() {
   const { user } = useAuth();
-  const { stats, loading: statsLoading } = useStats();
+  const { stats, loading: statsLoading, tickets: allTickets } = useStats();
   const { alertes } = useAlertes(false);
-  const { tickets: attenteTickets } = useTickets({ statut: "attente" });
   const { services } = useServices(true);
+
+  const attenteTickets = useMemo(
+    () => allTickets.filter(t => t.statut === 'attente'),
+    [allTickets]
+  );
 
   const fluxServices = useMemo(() =>
     services.map(s => {

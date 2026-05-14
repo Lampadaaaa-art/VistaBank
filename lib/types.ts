@@ -109,4 +109,5 @@ export interface SessionUser {
   prenom: string
   role: UserRole
   guichetId?: string
+  statut?: UserStatut
 }

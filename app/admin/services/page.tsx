@@ -18,12 +18,13 @@ const FORM_INIT: ServiceForm = { code: '', nom: '', tempsEstime: '5' };
 
 export default function Services() {
   const { user } = useAuth();
-  const { services, loading } = useServices();
+  const { services, loading, refresh } = useServices();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Service | null>(null);
   const [form, setForm] = useState<ServiceForm>(FORM_INIT);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [pageError, setPageError] = useState('');
   const [success, setSuccess] = useState('');
 
   const nomComplet = user ? `${user.prenom} ${user.nom}` : 'Chargement…';
@@ -58,7 +59,7 @@ export default function Services() {
           nom: form.nom,
           tempsEstime: parseInt(form.tempsEstime) || 5,
           actif: true,
-          ordre: services.length,
+          ordre: services.length > 0 ? Math.max(...services.map(s => s.ordre)) + 1 : 0,
         }),
       });
       if (!res.ok) {
@@ -69,6 +70,7 @@ export default function Services() {
       closeModal();
       setSuccess(`Service "${form.nom}" créé avec succès.`);
       setTimeout(() => setSuccess(''), 4000);
+      await refresh();
     } catch {
       setError('Erreur réseau. Vérifiez votre connexion.');
     } finally {
@@ -101,6 +103,7 @@ export default function Services() {
       closeModal();
       setSuccess(`Service "${form.nom}" modifié avec succès.`);
       setTimeout(() => setSuccess(''), 4000);
+      await refresh();
     } catch {
       setError('Erreur réseau. Vérifiez votre connexion.');
     } finally {
@@ -109,16 +112,33 @@ export default function Services() {
   };
 
   const handleToggleActif = async (serviceId: string, actif: boolean) => {
-    await fetch(`/api/services/${serviceId}`, {
+    const res = await fetch(`/api/services/${serviceId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ actif: !actif }),
     });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setPageError(d.error ?? 'Erreur lors du changement de statut');
+      setTimeout(() => setPageError(''), 6000);
+    } else {
+      await refresh();
+    }
   };
 
-  const handleDelete = async (serviceId: string) => {
-    if (!confirm('Supprimer ce service ?')) return;
-    await fetch(`/api/services/${serviceId}`, { method: 'DELETE' });
+  const handleDelete = async (serviceId: string, nomService: string) => {
+    if (!confirm(`Supprimer le service "${nomService}" ?`)) return;
+    setPageError('');
+    const res = await fetch(`/api/services/${serviceId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setPageError(d.error ?? 'Erreur lors de la suppression');
+      setTimeout(() => setPageError(''), 6000);
+    } else {
+      setSuccess(`Service "${nomService}" supprimé avec succès.`);
+      setTimeout(() => setSuccess(''), 4000);
+      await refresh();
+    }
   };
 
   return (
@@ -184,6 +204,11 @@ export default function Services() {
               {success}
             </div>
           )}
+          {pageError && (
+            <div className="mb-6 px-6 py-4 bg-red-50 border border-red-200 rounded-xl text-red-700 font-semibold text-sm">
+              {pageError}
+            </div>
+          )}
 
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-6">
             <div className="max-w-2xl">
@@ -212,11 +237,11 @@ export default function Services() {
               </thead>
               <tbody className="divide-y divide-surface-container-low">
                 {loading ? (
-                  <tr><td colSpan={5} className="px-8 py-12 text-center text-secondary">Chargement…</td></tr>
+                  <tr key="loading"><td colSpan={5} className="px-8 py-12 text-center text-secondary">Chargement…</td></tr>
                 ) : services.length === 0 ? (
-                  <tr><td colSpan={5} className="px-8 py-12 text-center text-secondary">Aucun service</td></tr>
+                  <tr key="empty"><td colSpan={5} className="px-8 py-12 text-center text-secondary">Aucun service</td></tr>
                 ) : services.map(service => (
-                  <tr key={service.id} className="hover:bg-surface-container-low/30 transition-colors">
+                  <tr key={service.id ?? service.code} className="hover:bg-surface-container-low/30 transition-colors">
                     <td className="px-8 py-6">
                       <div className="w-10 h-10 rounded-xl bg-primary-fixed text-primary font-headline font-black text-xl flex items-center justify-center">
                         {service.code}
@@ -246,7 +271,7 @@ export default function Services() {
                         <button onClick={() => openEdit(service)} className="p-2 text-secondary hover:text-primary hover:bg-surface-container rounded-full transition-colors">
                           <Edit2 className="w-5 h-5" />
                         </button>
-                        <button onClick={() => handleDelete(service.id)} className="p-2 text-secondary hover:text-red-500 hover:bg-red-50 rounded-full transition-colors">
+                        <button onClick={() => handleDelete(service.id, service.nom)} className="p-2 text-secondary hover:text-red-500 hover:bg-red-50 rounded-full transition-colors">
                           <Trash2 className="w-5 h-5" />
                         </button>
                       </div>

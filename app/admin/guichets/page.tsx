@@ -28,7 +28,7 @@ const FORM_INIT: GuichetForm = { numero: '', nom: '', serviceCode: '', caissierU
 
 export default function AdminGuichets() {
   const { user: authUser } = useAuth();
-  const { guichets, loading } = useGuichets();
+  const { guichets, loading, refresh } = useGuichets();
   const { services } = useServices(true);
 
   const [caissiers, setCaissiers] = useState<AppUser[]>([]);
@@ -41,11 +41,13 @@ export default function AdminGuichets() {
   const [error, setError] = useState('');
 
   const fetchCaissiers = useCallback(async () => {
-    const res = await fetch('/api/users');
-    if (res.ok) {
-      const data: AppUser[] = await res.json();
-      setCaissiers(data.filter(u => u.role === 'caissier'));
-    }
+    try {
+      const res = await fetch('/api/users');
+      if (res.ok) {
+        const data: AppUser[] = await res.json();
+        setCaissiers(data.filter(u => u.role === 'caissier'));
+      }
+    } catch { /* ignore — user may not be authenticated yet */ }
   }, []);
 
   useEffect(() => { fetchCaissiers(); }, [fetchCaissiers]);
@@ -55,12 +57,14 @@ export default function AdminGuichets() {
     setForm(FORM_INIT);
     setError('');
     setConfirmDelete(false);
+    fetchCaissiers();
     setIsModalOpen(true);
   };
 
   const openEdit = (g: Guichet) => {
     setEditTarget(g);
     setConfirmDelete(false);
+    fetchCaissiers();
     setForm({
       numero: String(g.numero),
       nom: g.nom,
@@ -78,12 +82,16 @@ export default function AdminGuichets() {
     try {
       const res = await fetch(`/api/guichets/${editTarget.id}`, { method: 'DELETE' });
       if (!res.ok) {
-        const d = await res.json();
-        setError(d.error ?? 'Erreur lors de la suppression');
+        let msg = 'Erreur lors de la suppression';
+        try { const d = await res.json(); msg = d.error ?? msg; } catch { /* non-JSON */ }
+        setError(msg);
         setConfirmDelete(false);
         return;
       }
       setIsModalOpen(false);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur réseau');
     } finally {
       setDeleting(false);
     }
@@ -110,7 +118,7 @@ export default function AdminGuichets() {
         nom: form.nom,
         serviceCode: form.serviceCode,
         statut: form.statut,
-        ...(form.caissierUid ? { caissierUid: form.caissierUid } : {}),
+        caissierUid: form.caissierUid || null,
       };
 
       let res: Response;
@@ -129,11 +137,15 @@ export default function AdminGuichets() {
       }
 
       if (!res.ok) {
-        const d = await res.json();
-        setError(d.error ?? 'Erreur lors de la sauvegarde');
+        let msg = 'Erreur lors de la sauvegarde';
+        try { const d = await res.json(); msg = d.error ?? msg; } catch { /* non-JSON */ }
+        setError(msg);
         return;
       }
       setIsModalOpen(false);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur réseau');
     } finally {
       setSaving(false);
     }
@@ -354,17 +366,17 @@ export default function AdminGuichets() {
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all appearance-none"
                 >
                   <option value="">Aucun caissier assigné</option>
-                  {caissiers
-                    .filter(c => {
-                      const assignedElsewhere = guichets.some(
-                        g => g.caissierUid === c.id && g.id !== editTarget?.id
-                      );
-                      return !assignedElsewhere;
-                    })
-                    .map(c => (
-                      <option key={c.id} value={c.id}>{c.prenom} {c.nom}</option>
-                    ))
-                  }
+                  {caissiers.map(c => {
+                    const autreGuichet = guichets.find(
+                      g => g.caissierUid === c.id && g.id !== editTarget?.id
+                    );
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {c.prenom} {c.nom}
+                        {autreGuichet ? ` (actuellement Guichet ${String(autreGuichet.numero).padStart(2, '0')} — sera réaffecté)` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

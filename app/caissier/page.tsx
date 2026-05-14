@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from 'react';
-import { LayoutDashboard, ListOrdered, History, HelpCircle, Megaphone, PauseCircle, ArrowUpRight, CheckCircle2, User, X } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { LayoutDashboard, ListOrdered, History, HelpCircle, Megaphone, PauseCircle, PlayCircle, ArrowUpRight, CheckCircle2, User, X } from 'lucide-react';
 import { AdminLogoutButton } from '@/components/admin-logout-button';
 import Link from 'next/link';
 import { useTickets } from '@/hooks/useTickets';
@@ -10,6 +10,10 @@ import { useStats } from '@/hooks/useStats';
 import { useAuth } from '@/hooks/useAuth';
 import { useServices } from '@/hooks/useServices';
 
+const PRIORITY_ORDER: Record<string, number> = {
+  handicap: 1, enceinte: 2, age: 3, vip: 4, standard: 5,
+}
+
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
@@ -17,13 +21,14 @@ function formatDuration(seconds: number): string {
 }
 
 export default function Caissier() {
-  const { user } = useAuth();
-  const { tickets: attenteTickets } = useTickets({ statut: "attente" });
-  const { tickets: enCoursTickets } = useTickets({ statut: "en_cours" });
-  const { guichets } = useGuichets();
+  const { user, loading: authLoading } = useAuth();
+  const { tickets: attenteTickets, refresh: refreshAttente } = useTickets({ statut: "attente" });
+  const { tickets: enCoursTickets, refresh: refreshEnCours } = useTickets({ statut: "en_cours" });
+  const { guichets, loading: guichetsLoading, refresh: refreshGuichets } = useGuichets();
   const { stats } = useStats();
   const { services } = useServices(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferCode, setTransferCode] = useState('');
 
@@ -31,21 +36,67 @@ export default function Caissier() {
     user?.guichetId ? g.id === user.guichetId : g.caissierUid === user?.uid
   );
 
-  const ticketActuel = enCoursTickets.find(t => t.guichetId === monGuichet?.id)
-    ?? (enCoursTickets.length > 0 ? enCoursTickets[0] : null);
+  const ticketActuel = monGuichet
+    ? (enCoursTickets.find(t => t.guichetId === monGuichet.id) ?? null)
+    : null;
 
-  const queuePreview = attenteTickets.slice(0, 3);
+  const sortedAttenteTickets = useMemo(() =>
+    [...attenteTickets].sort(
+      (a, b) =>
+        (PRIORITY_ORDER[a.priorite] ?? 5) - (PRIORITY_ORDER[b.priorite] ?? 5) ||
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    ),
+    [attenteTickets]
+  );
+
+  const queuePreview = sortedAttenteTickets.slice(0, 3);
 
   const handleAppelerSuivant = async () => {
-    if (!attenteTickets.length || !monGuichet || actionLoading) return;
+    console.log('[Appeler] click — monGuichet:', monGuichet, '| attenteTickets:', attenteTickets.length, '| actionLoading:', actionLoading);
+    if (actionLoading) return;
+    setActionError(null);
+
+    if (!monGuichet) {
+      setActionError("Aucun guichet n'est assigné à votre compte. Contactez un administrateur.");
+      return;
+    }
+    if (!attenteTickets.length) {
+      setActionError("Aucun ticket en attente dans la file d'attente.");
+      return;
+    }
+
     setActionLoading(true);
     try {
-      const prochainTicket = attenteTickets[0];
-      await fetch(`/api/tickets/${prochainTicket.id}`, {
+      // Terminer automatiquement le ticket en cours avant d'en appeler un nouveau
+      if (ticketActuel) {
+        const termRes = await fetch(`/api/tickets/${ticketActuel.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ statut: "termine" }),
+        });
+        if (!termRes.ok) {
+          const d = await termRes.json().catch(() => ({}));
+          setActionError(d.error ?? `Erreur ${termRes.status}`);
+          return;
+        }
+      }
+
+      const prochainTicket = sortedAttenteTickets[0];
+      const res = await fetch(`/api/tickets/${prochainTicket.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ statut: "en_cours", guichetId: monGuichet.id }),
       });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setActionError(d.error ?? `Erreur ${res.status}`);
+      } else {
+        refreshAttente();
+        refreshEnCours();
+        refreshGuichets();
+      }
+    } catch {
+      setActionError('Erreur réseau. Vérifiez votre connexion.');
     } finally {
       setActionLoading(false);
     }
@@ -54,12 +105,22 @@ export default function Caissier() {
   const handleTerminer = async () => {
     if (!ticketActuel || actionLoading) return;
     setActionLoading(true);
+    setActionError(null);
     try {
-      await fetch(`/api/tickets/${ticketActuel.id}`, {
+      const res = await fetch(`/api/tickets/${ticketActuel.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ statut: "termine" }),
       });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setActionError(d.error ?? `Erreur ${res.status}`);
+      } else {
+        refreshEnCours();
+        refreshAttente();
+      }
+    } catch {
+      setActionError('Erreur réseau. Vérifiez votre connexion.');
     } finally {
       setActionLoading(false);
     }
@@ -67,13 +128,23 @@ export default function Caissier() {
 
   const handlePause = async () => {
     if (!monGuichet || actionLoading) return;
+    const nouveauStatut = monGuichet.statut === "pause" ? "ouvert" : "pause";
     setActionLoading(true);
+    setActionError(null);
     try {
-      await fetch(`/api/guichets/${monGuichet.id}`, {
+      const res = await fetch(`/api/guichets/${monGuichet.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ statut: "pause" }),
+        body: JSON.stringify({ statut: nouveauStatut }),
       });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setActionError(d.error ?? `Erreur ${res.status}`);
+      } else {
+        refreshGuichets();
+      }
+    } catch {
+      setActionError('Erreur réseau. Vérifiez votre connexion.');
     } finally {
       setActionLoading(false);
     }
@@ -90,12 +161,18 @@ export default function Caissier() {
     const targetService = services.find(s => s.code === transferCode);
     if (!targetService) return;
     setActionLoading(true);
+    setActionError(null);
     try {
-      await fetch(`/api/tickets/${ticketActuel.id}`, {
+      const res1 = await fetch(`/api/tickets/${ticketActuel.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ statut: "transfere" }),
       });
+      if (!res1.ok) {
+        const d = await res1.json().catch(() => ({}));
+        setActionError(d.error ?? `Erreur ${res1.status}`);
+        return;
+      }
       await fetch('/api/public/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -106,6 +183,10 @@ export default function Caissier() {
         }),
       });
       setShowTransferModal(false);
+      refreshEnCours();
+      refreshAttente();
+    } catch {
+      setActionError('Erreur réseau. Vérifiez votre connexion.');
     } finally {
       setActionLoading(false);
     }
@@ -160,6 +241,18 @@ export default function Caissier() {
         </header>
 
         <div className="p-10 max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {!authLoading && user && !monGuichet && (
+            <div className="lg:col-span-12 bg-amber-50 border border-amber-200 rounded-xl px-6 py-4 text-amber-800 text-sm font-semibold flex items-center gap-3">
+              <span className="text-amber-500 text-lg">⚠</span>
+              Aucun guichet n&apos;est assigné à votre compte. Contactez un administrateur pour l&apos;assigner à un guichet.
+            </div>
+          )}
+          {actionError && (
+            <div className="lg:col-span-12 bg-red-50 border border-red-200 rounded-xl px-6 py-4 text-red-700 text-sm font-semibold flex items-center justify-between gap-3">
+              <span>{actionError}</span>
+              <button onClick={() => setActionError(null)} className="text-red-400 hover:text-red-600 font-bold text-lg leading-none">×</button>
+            </div>
+          )}
           <div className="lg:col-span-8 flex flex-col gap-6">
             <div className="bg-surface-container-lowest rounded-[1.5rem] p-12 flex flex-col items-center justify-center text-center shadow-[0_20px_50px_rgba(17,28,45,0.06)] relative overflow-hidden">
               <span className="text-slate-500 text-sm uppercase tracking-widest mb-4 font-bold">Ticket Actuel</span>
@@ -171,11 +264,11 @@ export default function Caissier() {
               ) : null}
               <button
                 onClick={handleAppelerSuivant}
-                disabled={!attenteTickets.length || !monGuichet || actionLoading}
-                className="bg-gradient-to-br from-primary to-primary-container text-white px-12 py-6 rounded-full font-headline font-bold text-2xl flex items-center gap-3 hover:scale-105 transition-transform shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                disabled={actionLoading}
+                className="bg-gradient-to-br from-primary to-primary-container text-white px-12 py-6 rounded-full font-headline font-bold text-2xl flex items-center gap-3 hover:scale-105 active:scale-95 transition-transform shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
                 <Megaphone className="w-8 h-8" />
-                Appeler le Suivant
+                {actionLoading ? 'Appel en cours…' : 'Appeler le Suivant'}
               </button>
             </div>
 
@@ -183,10 +276,10 @@ export default function Caissier() {
               <button
                 onClick={handlePause}
                 disabled={!monGuichet || actionLoading}
-                className="flex flex-col items-center justify-center gap-3 p-6 bg-white rounded-xl text-slate-600 font-headline font-semibold hover:bg-slate-50 transition-colors border border-slate-100 disabled:opacity-50"
+                className={`flex flex-col items-center justify-center gap-3 p-6 rounded-xl font-headline font-semibold transition-colors border disabled:opacity-50 ${monGuichet?.statut === 'pause' ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100' : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'}`}
               >
-                <PauseCircle className="w-8 h-8" />
-                <span>Pause</span>
+                {monGuichet?.statut === 'pause' ? <PlayCircle className="w-8 h-8" /> : <PauseCircle className="w-8 h-8" />}
+                <span>{monGuichet?.statut === 'pause' ? 'Reprendre' : 'Pause'}</span>
               </button>
               <button
                 onClick={handleTransferer}

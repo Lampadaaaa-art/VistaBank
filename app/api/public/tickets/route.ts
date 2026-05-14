@@ -9,9 +9,27 @@ export async function POST(request: NextRequest) {
     const json = await request.json()
     const data = createTicketSchema.parse(json)
 
-    const { data: numero, error: fnError } = await adminSupabase
+    const { data: rpcResult, error: fnError } = await adminSupabase
       .rpc("next_ticket_numero", { p_service_code: data.serviceCode })
-    if (fnError) return err("Erreur compteur", 500)
+
+    let numero: string
+    if (fnError || !rpcResult) {
+      const { data: lastTickets } = await adminSupabase
+        .from("tickets")
+        .select("numero")
+        .eq("service_code", data.serviceCode)
+        .order("created_at", { ascending: false })
+        .limit(1)
+      const last = lastTickets?.[0]?.numero as string | undefined
+      if (last) {
+        const m = last.match(/^([A-Z]+)-(\d+)$/)
+        numero = m ? `${m[1]}-${String(parseInt(m[2]) + 1).padStart(3, "0")}` : `${data.serviceCode}-001`
+      } else {
+        numero = `${data.serviceCode}-001`
+      }
+    } else {
+      numero = rpcResult as string
+    }
 
     const { data: ticket, error: insertError } = await adminSupabase
       .from("tickets")
@@ -26,13 +44,16 @@ export async function POST(request: NextRequest) {
       .select()
       .single()
 
-    if (insertError) return err("Erreur lors de la création du ticket", 500)
+    if (insertError) {
+      console.error("[POST /api/public/tickets] insert error:", insertError)
+      return err(`Erreur base de données: ${insertError.message}`, 500)
+    }
 
     return ok({
       id:          ticket.id,
       numero:      ticket.numero,
       serviceCode: ticket.service_code,
-      serviceName: ticket.service_name,
+      serviceName: data.serviceName,
       priorite:    ticket.priorite,
       statut:      ticket.statut,
       createdAt:   ticket.created_at,

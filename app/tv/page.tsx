@@ -27,10 +27,16 @@ export default function TvDisplay() {
   const [time, setTime] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const { tickets: enCoursTickets } = useTickets({ statut: "en_cours" });
-  const { tickets: attenteTickets } = useTickets({ statut: "attente" });
-  const { tickets: terminesTickets } = useTickets({ statut: "termine" });
-  const { guichets } = useGuichets();
+  const todayStart = useMemo(() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  }, [])
+
+  const { tickets: enCoursTickets } = useTickets({ statut: "en_cours", publicMode: true });
+  const { tickets: attenteTickets } = useTickets({ statut: "attente", publicMode: true });
+  const { tickets: terminesTickets } = useTickets({ statut: "termine", dateFrom: todayStart, publicMode: true });
+  const { guichets } = useGuichets(true);
 
   useEffect(() => {
     const interval = setInterval(() => setTime(new Date()), 1000);
@@ -59,7 +65,15 @@ export default function TvDisplay() {
     }
   }, []);
 
-  const currentTicket = enCoursTickets[0] ?? null;
+  const currentTicket = useMemo(() => {
+    if (enCoursTickets.length === 0) return null;
+    return [...enCoursTickets].sort(
+      (a, b) =>
+        new Date(b.appelleAt ?? b.createdAt).getTime() -
+        new Date(a.appelleAt ?? a.createdAt).getTime()
+    )[0];
+  }, [enCoursTickets]);
+
   const currentGuichet = useMemo(
     () => guichets.find(g => g.id === currentTicket?.guichetId),
     [guichets, currentTicket]
@@ -181,6 +195,11 @@ export default function TvDisplay() {
             <h2 className="font-bold mb-6 text-on-surface flex items-center gap-3" style={{fontSize: '1.6rem', fontFamily: M}}>
               <Clock className="text-primary w-6 h-6 shrink-0" />
               Prochains Billets
+              {attenteTickets.length > 0 && (
+                <span className="ml-auto text-sm font-bold text-secondary" style={{fontFamily: 'Inter, sans-serif'}}>
+                  {attenteTickets.length} en attente
+                </span>
+              )}
             </h2>
             <div className="grid grid-cols-4 gap-4">
               {nextTickets.length > 0 ? nextTickets.map((ticket) => (

@@ -19,12 +19,12 @@ export async function GET() {
 
 function mapService(row: Record<string, unknown>) {
   return {
-    id:          row.id,
-    code:        row.code,
-    nom:         row.nom,
-    icone:       row.icone ?? undefined,
-    tempsEstime: row.temps_estime,
-    actif:       row.actif,
-    ordre:       row.ordre,
+    id:          (row.code ?? '') as string,
+    code:        row.code as string,
+    nom:         row.nom as string,
+    icone:       row.icone as string | undefined,
+    tempsEstime: row.temps_estime as number,
+    actif:       row.actif as boolean,
+    ordre:       row.ordre as number,
   }
 }
