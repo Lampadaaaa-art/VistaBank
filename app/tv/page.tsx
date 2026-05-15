@@ -81,29 +81,38 @@ export default function TvDisplay() {
 
   const lastAnnouncedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!currentTicket) return;
-    if (currentTicket.id === lastAnnouncedRef.current) return;
-    lastAnnouncedRef.current = currentTicket.id;
-    const guichetNum = currentGuichet?.numero ?? '';
-    const text = `Ticket ${currentTicket.numero}. Veuillez vous rendre au guichet ${guichetNum}.`;
+    if (!currentTicket || !currentGuichet) return;
 
-    const bestVoice = voicesRef.current.find(v => v.lang === 'fr-FR' && v.name.toLowerCase().includes('google'))
-      ?? voicesRef.current.find(v => v.lang === 'fr-FR')
+    const key = `${currentTicket.id}:${currentGuichet.numero}`;
+    if (key === lastAnnouncedRef.current) return;
+    lastAnnouncedRef.current = key;
+
+    const text = `Attention. Le ticket ${currentTicket.numero} est appelé. Merci de vous présenter au guichet numéro ${currentGuichet.numero}.`;
+
+    const voices = voicesRef.current;
+    const bestVoice =
+      voices.find(v => v.lang === 'fr-FR' && v.name.toLowerCase().includes('google'))
+      ?? voices.find(v => v.lang === 'fr-FR' && /amélie|marie|thomas|juliette/i.test(v.name))
+      ?? voices.find(v => v.lang === 'fr-FR' && v.localService === false)
+      ?? voices.find(v => v.lang === 'fr-FR')
       ?? null;
 
     const makeUtterance = () => {
       const u = new SpeechSynthesisUtterance(text);
       u.lang = 'fr-FR';
-      u.rate = 0.85;
-      u.pitch = 1.0;
+      u.rate = 0.92;
+      u.pitch = 1.08;
+      u.volume = 1.0;
       if (bestVoice) u.voice = bestVoice;
       return u;
     };
 
     window.speechSynthesis.cancel();
-    const first = makeUtterance();
-    first.onend = () => setTimeout(() => window.speechSynthesis.speak(makeUtterance()), 1200);
-    window.speechSynthesis.speak(first);
+    setTimeout(() => {
+      const first = makeUtterance();
+      first.onend = () => setTimeout(() => window.speechSynthesis.speak(makeUtterance()), 1500);
+      window.speechSynthesis.speak(first);
+    }, 200);
   }, [currentTicket?.id, currentGuichet?.numero]);
   const nextTickets = attenteTickets.slice(0, 4);
   const history = useMemo(

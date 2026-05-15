@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo, useRef } from 'react';
-import { LayoutDashboard, ListOrdered, MonitorSmartphone, FileText, Clock, Users, BarChart3, PieChart, BellRing, TrendingUp, CheckCircle2, AlertCircle, Download, Loader2 } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { LayoutDashboard, ListOrdered, MonitorSmartphone, FileText, Clock, Users, BarChart3, PieChart, BellRing, TrendingUp, CheckCircle2, AlertCircle, Download } from 'lucide-react';
 import Link from 'next/link';
 import { useStats } from '@/hooks/useStats';
 import { useTickets } from '@/hooks/useTickets';
@@ -41,8 +41,6 @@ function tsMs(ts: unknown): number {
 
 export default function Rapports() {
   const [period, setPeriod] = useState<Period>('today');
-  const [exporting, setExporting] = useState(false);
-  const reportRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const { stats } = useStats();
   const { tickets: allTickets } = useTickets({ statut: ['attente', 'en_cours', 'termine'] });
@@ -78,8 +76,9 @@ export default function Rapports() {
     termines.forEach(t => {
       if (!t.guichetId) return;
       const g = guichets.find(g => g.id === t.guichetId);
-      if (!g) return;
-      map[t.guichetId] = map[t.guichetId] ?? { nom: g.nom, numero: g.numero, count: 0, tempsTotal: 0 };
+      const nom = g?.nom ?? `Guichet ${t.guichetId.slice(-4)}`;
+      const numero = g?.numero ?? 0;
+      map[t.guichetId] ??= { nom, numero, count: 0, tempsTotal: 0 };
       map[t.guichetId].count++;
       map[t.guichetId].tempsTotal += t.tempsService ?? 0;
     });
@@ -104,28 +103,44 @@ export default function Rapports() {
   const nomComplet = user ? `${user.prenom} ${user.nom}` : '';
   const initiales = user ? `${user.prenom[0]}${user.nom[0]}` : '';
 
+  const [generating, setGenerating] = useState(false);
+  const [pdfMode, setPdfMode] = useState(false);
+
   const handleDownloadPDF = async () => {
-    if (!reportRef.current || exporting) return;
-    setExporting(true);
+    if (generating) return;
+    const el = document.getElementById('report-print');
+    if (!el) return;
+    setGenerating(true);
+    setPdfMode(true);
+    // Attendre que React commite le rendu pdfMode=true avant de capturer
+    await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
     try {
-      const { default: jsPDF } = await import('jspdf');
-      const { default: html2canvas } = await import('html2canvas');
-      const canvas = await html2canvas(reportRef.current, { scale: 2, useCORS: true, backgroundColor: '#f5f5f5' });
-      const imgData = canvas.toDataURL('image/png');
+      const [{ toCanvas }, { jsPDF }] = await Promise.all([
+        import('html-to-image'),
+        import('jspdf'),
+      ]);
+      // Reset margin to prevent mx-auto offset from the sidebar context bleeding into capture
+      const canvas = await toCanvas(el, { pixelRatio: 2, backgroundColor: '#ffffff', style: { margin: '0' } });
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      pdf.setProperties({ title: `Rapport Vista Gui — ${PERIOD_LABELS[period]}` });
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const imgH = (canvas.height * pageW) / canvas.width;
-      let y = 0;
-      while (y < imgH) {
-        if (y > 0) pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, -y, pageW, imgH);
-        y += pageH;
+      const pdfW = pdf.internal.pageSize.getWidth();
+      const pdfH = pdf.internal.pageSize.getHeight();
+      const marginX = 10; // 10mm left/right margins for clean A4 layout
+      const imageW = pdfW - 2 * marginX;
+      const ratio = imageW / canvas.width;
+      const pageHeightPx = Math.floor(pdfH / ratio);
+      for (let page = 0; page * pageHeightPx < canvas.height; page++) {
+        if (page > 0) pdf.addPage();
+        const sliceH = Math.min(pageHeightPx, canvas.height - page * pageHeightPx);
+        const tmp = document.createElement('canvas');
+        tmp.width = canvas.width;
+        tmp.height = sliceH;
+        tmp.getContext('2d')!.drawImage(canvas, 0, page * pageHeightPx, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        pdf.addImage(tmp.toDataURL('image/jpeg', 0.95), 'JPEG', marginX, 0, imageW, sliceH * ratio);
       }
-      pdf.save(`rapport-vistaGui-${period}-${new Date().toISOString().slice(0, 10)}.pdf`);
+      pdf.save(`rapport-${period}-${new Date().toLocaleDateString('fr-FR').replace(/\//g, '-')}.pdf`);
     } finally {
-      setExporting(false);
+      setGenerating(false);
+      setPdfMode(false);
     }
   };
 
@@ -174,11 +189,15 @@ export default function Rapports() {
           <div className="flex items-center gap-4 border-l border-on-surface/10 pl-6">
             <button
               onClick={handleDownloadPDF}
-              disabled={exporting}
-              className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-full font-bold text-sm hover:bg-primary/90 transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-sm shadow-primary/20"
+              disabled={generating}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-full font-bold text-sm hover:bg-primary/90 transition-all shadow-sm shadow-primary/20 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              {exporting ? 'Export...' : 'Télécharger le rapport'}
+              {generating ? (
+                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              {generating ? 'Génération…' : 'Télécharger PDF'}
             </button>
             <div className="flex flex-col items-end">
               <span className="font-bold text-sm text-on-surface">{nomComplet}</span>
@@ -190,7 +209,24 @@ export default function Rapports() {
           </div>
         </header>
 
-        <div ref={reportRef} className="p-10 max-w-7xl mx-auto w-full">
+        <div id="report-print" className="p-10 max-w-7xl mx-auto w-full">
+          {/* PDF-only header */}
+          {pdfMode && (
+            <div className="flex justify-between items-center border-b-2 border-primary pb-6 mb-8">
+              <div>
+                <h1 className="text-2xl font-headline font-extrabold text-on-surface">
+                  Rapport d&apos;activité — {PERIOD_LABELS[period]}
+                </h1>
+                <p className="text-sm text-secondary font-semibold mt-1">
+                  Généré le {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-primary font-black text-xl font-headline">Banque Vista Gui</p>
+                <p className="text-xs text-secondary font-bold uppercase tracking-widest mt-1">Agence Principale</p>
+              </div>
+            </div>
+          )}
           {/* Period Selector */}
           <div className="flex items-center gap-2 bg-surface-container-lowest p-1.5 rounded-full shadow-sm border border-on-surface/5 w-fit mb-8">
             {(['today', 'week', 'month'] as Period[]).map(p => (
@@ -380,7 +416,7 @@ export default function Rapports() {
                       </td>
                       <td className="px-8 py-5 text-center">
                         <span className={`font-bold text-sm px-3 py-1 rounded-full ${row.tempsMoyen > 0 && row.tempsMoyen <= 5 ? 'bg-emerald-50 text-emerald-600' : row.tempsMoyen > 10 ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'}`}>
-                          {row.tempsMoyen > 0 ? `${row.tempsMoyen} min` : '—'}
+                          {row.tempsMoyen > 0 ? `${row.tempsMoyen} min` : row.count > 0 ? '< 1 min' : '—'}
                         </span>
                       </td>
                     </tr>

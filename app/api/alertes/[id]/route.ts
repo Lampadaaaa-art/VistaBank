@@ -33,3 +33,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
   })
 }
+
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  return withAuth(["admin", "superviseur"], async () => {
+    const { error } = await adminSupabase.from("alertes").delete().eq("id", id)
+    if (error) return err("Erreur lors de la suppression", 500)
+    return ok({ id, deleted: true })
+  })
+}

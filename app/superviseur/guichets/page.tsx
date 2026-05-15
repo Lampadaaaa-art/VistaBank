@@ -119,9 +119,15 @@ export default function SuperviseurGuichets() {
                     </div>
 
                     <div className="space-y-6 flex-1">
-                      <div>
-                        <p className="text-xs font-bold text-secondary uppercase tracking-widest mb-1">Nom</p>
-                        <p className="font-bold text-on-surface">{g.nom}</p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-xs font-bold text-secondary uppercase tracking-widest mb-1">Caissier</p>
+                          <p className="font-bold text-on-surface text-sm">{g.caissierNom ?? <span className="text-secondary font-medium italic">Non assigné</span>}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-secondary uppercase tracking-widest mb-1">Nom</p>
+                          <p className="font-bold text-on-surface text-sm">{g.nom}</p>
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="bg-surface-container-low rounded-xl p-4">

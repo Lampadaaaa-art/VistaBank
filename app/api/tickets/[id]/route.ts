@@ -42,10 +42,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           updates.temps_service = Math.round(
             (Date.now() - new Date(ticket.appelle_at as string).getTime()) / 1000
           )
+          // Temps d'attente = de la création jusqu'à l'appel (pas jusqu'à la fin)
+          updates.temps_attente = Math.round(
+            (new Date(ticket.appelle_at as string).getTime() - new Date(ticket.created_at as string).getTime()) / 1000
+          )
+        } else {
+          updates.temps_attente = Math.round(
+            (Date.now() - new Date(ticket.created_at as string).getTime()) / 1000
+          )
         }
-        updates.temps_attente = Math.round(
-          (Date.now() - new Date(ticket.created_at as string).getTime()) / 1000
-        )
 
         const guichetId = (data.guichetId ?? ticket.guichet_id) as string | undefined
         if (guichetId) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { LayoutDashboard, ListOrdered, MonitorSmartphone, BellRing, FileText, AlertTriangle, CheckCircle2, Clock, Search, MoreVertical } from 'lucide-react';
+import { LayoutDashboard, ListOrdered, MonitorSmartphone, BellRing, FileText, AlertTriangle, CheckCircle2, Clock, Search, MoreVertical, Trash2 } from 'lucide-react';
 import { AdminLogoutButton } from '@/components/admin-logout-button';
 import Link from 'next/link';
 import { useAlertes } from '@/hooks/useAlertes';
@@ -23,8 +23,14 @@ export default function Alertes() {
   const [filter, setFilter] = useState<AlerteFilter>('toutes');
   const [search, setSearch] = useState('');
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const nomComplet = user ? `${user.prenom} ${user.nom}` : 'Chargement…';
+
+  const handleSupprimer = async (alerteId: string) => {
+    setOpenMenuId(null);
+    await fetch(`/api/alertes/${alerteId}`, { method: 'DELETE' });
+  };
 
   const handleResoude = async (alerteId: string) => {
     if (!user || resolvingId) return;
@@ -43,7 +49,9 @@ export default function Alertes() {
   const critiques = actives.filter(a => a.severite === 'critique');
   const avertissements = actives.filter(a => a.severite === 'avertissement');
 
-  const allAlertes = [...actives, ...resolues];
+  const allAlertes = [...actives, ...resolues].filter(
+    (a, i, self) => self.findIndex(b => b.id === a.id) === i
+  );
 
   const displayed = allAlertes.filter(a => {
     if (search && !a.titre.toLowerCase().includes(search.toLowerCase()) && !a.message.toLowerCase().includes(search.toLowerCase())) return false;
@@ -211,9 +219,28 @@ export default function Alertes() {
                         >
                           {resolvingId === alerte.id ? 'En cours…' : 'Résoudre'}
                         </button>
-                        <button className="p-3 text-secondary hover:text-on-surface hover:bg-surface-container rounded-xl transition-colors">
-                          <MoreVertical className="w-5 h-5" />
-                        </button>
+                        <div className="relative">
+                          <button
+                            onClick={() => setOpenMenuId(openMenuId === alerte.id ? null : alerte.id)}
+                            className="p-3 text-secondary hover:text-on-surface hover:bg-surface-container rounded-xl transition-colors"
+                          >
+                            <MoreVertical className="w-5 h-5" />
+                          </button>
+                          {openMenuId === alerte.id && (
+                            <>
+                              <div className="fixed inset-0 z-[5]" onClick={() => setOpenMenuId(null)} />
+                              <div className="absolute right-0 top-full mt-1 bg-surface-container-lowest rounded-xl shadow-lg border border-on-surface/10 z-10 min-w-[150px] overflow-hidden">
+                                <button
+                                  onClick={() => handleSupprimer(alerte.id)}
+                                  className="flex items-center gap-2 w-full px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  Supprimer
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>

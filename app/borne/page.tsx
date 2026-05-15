@@ -129,7 +129,29 @@ export default function BorneClient() {
     }
   };
 
+  const [pdfLoading, setPdfLoading] = useState(false);
+
   const reset = () => { setTicket(null); setSelectedService(null); setTicketError(null); };
+
+  const handleDownloadTicket = async () => {
+    const el = document.getElementById('ticket-card');
+    if (!el || pdfLoading || !ticket) return;
+    setPdfLoading(true);
+    try {
+      const [{ toCanvas }, { jsPDF }] = await Promise.all([
+        import('html-to-image'),
+        import('jspdf'),
+      ]);
+      const canvas = await toCanvas(el, { pixelRatio: 3, backgroundColor: '#ffffff' });
+      const widthMm = 80;
+      const heightMm = (canvas.height / canvas.width) * widthMm;
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [widthMm, heightMm] });
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, widthMm, heightMm);
+      pdf.save(`ticket-${ticket.number}.pdf`);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -148,8 +170,7 @@ export default function BorneClient() {
   if (ticket) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-12 relative overflow-hidden bg-[#fdfafb]">
-        <style>{`@media print { @page { size: 80mm auto; margin: 0; } html, body { width: 80mm; height: auto; margin: 0; padding: 0; } body * { visibility: hidden; } #ticket-card, #ticket-card * { visibility: visible; } #ticket-card { position: fixed; top: 0; left: 0; width: 80mm !important; transform: none !important; box-shadow: none !important; border-radius: 8px !important; } }`}</style>
-        <div className="fixed inset-0 z-0 opacity-40 pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(230, 0, 66, 0.03) 20px, rgba(230, 0, 66, 0.03) 40px)' }}></div>
+    <div className="fixed inset-0 z-0 opacity-40 pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(230, 0, 66, 0.03) 20px, rgba(230, 0, 66, 0.03) 40px)' }}></div>
         <div id="ticket-card" className="bg-white w-[340px] rounded-[2rem] shadow-[0_20px_60px_rgba(0,0,0,0.05)] flex flex-col relative z-10 animate-in zoom-in duration-300">
           <div className="p-8 pb-6 flex flex-col items-center text-center">
             <div className="flex items-center gap-2 text-primary font-bold text-base mb-8">
@@ -177,8 +198,9 @@ export default function BorneClient() {
           </div>
         </div>
         <div className="mt-6 flex flex-col gap-3 w-[340px] relative z-10 animate-in slide-in-from-bottom-4 duration-500 delay-150 fill-mode-both">
-          <button onClick={() => window.print()} className="w-full py-4 bg-primary text-white rounded-full font-bold text-base flex items-center justify-center gap-3 shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all active:scale-[0.98]">
-            <Printer className="w-5 h-5" /> Imprimer le ticket
+          <button onClick={handleDownloadTicket} disabled={pdfLoading} className="w-full py-4 bg-primary text-white rounded-full font-bold text-base flex items-center justify-center gap-3 shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed">
+            {pdfLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Printer className="w-5 h-5" />}
+            {pdfLoading ? 'Génération…' : 'Télécharger le ticket'}
           </button>
           <button onClick={reset} className="w-full py-4 bg-white/80 backdrop-blur-md text-slate-600 rounded-full font-bold text-sm flex items-center justify-center gap-2 hover:bg-white transition-all shadow-sm border border-white/20 active:scale-[0.98]">
             <ArrowLeft className="w-4 h-4" /> Retour

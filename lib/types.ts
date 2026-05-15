@@ -35,6 +35,7 @@ export interface Guichet {
   nom: string
   serviceCode: string
   caissierUid?: string
+  caissierNom?: string
   statut: GuichetStatut
   ticketEnCours?: string
   updatedAt: string

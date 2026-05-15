@@ -19,17 +19,21 @@ export async function GET() {
     // Resolve caissier assignments from users table
     const { data: usersWithGuichet } = await adminSupabase
       .from("users")
-      .select("id, guichet_id")
+      .select("id, guichet_id, prenom, nom")
       .not("guichet_id", "is", null)
 
     const caissierByGuichet = new Map(
-      (usersWithGuichet ?? []).map(u => [u.guichet_id as string, u.id as string])
+      (usersWithGuichet ?? []).map(u => [u.guichet_id as string, u as { id: string; prenom: string; nom: string }])
     )
 
-    return ok((data ?? []).map(row => ({
-      ...mapGuichet(row),
-      caissierUid: caissierByGuichet.get(row.id as string),
-    })))
+    return ok((data ?? []).map(row => {
+      const caissier = caissierByGuichet.get(row.id as string)
+      return {
+        ...mapGuichet(row),
+        caissierUid: caissier?.id,
+        caissierNom: caissier ? `${caissier.prenom} ${caissier.nom}` : undefined,
+      }
+    }))
   })
 }
 

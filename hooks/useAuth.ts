@@ -19,6 +19,7 @@ export function useAuth() {
   useEffect(() => {
     const supabase = getSupabaseClient()
     let statutInterval: ReturnType<typeof setInterval> | null = null
+    let heartbeatInterval: ReturnType<typeof setInterval> | null = null
 
     const markOffline = async (uid: string) => {
       await supabase
@@ -28,6 +29,7 @@ export function useAuth() {
 
     const clearStatutInterval = () => {
       if (statutInterval) { clearInterval(statutInterval); statutInterval = null }
+      if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null }
     }
 
     async function loadUser(session: Session | null) {
@@ -68,6 +70,9 @@ export function useAuth() {
           guichetId: userData.guichetId,
         })
         await supabase.from("presence").upsert({ user_id: uid, en_ligne: true, depuis: new Date().toISOString() })
+        heartbeatInterval = setInterval(async () => {
+          await supabase.from("presence").upsert({ user_id: uid, en_ligne: true, depuis: new Date().toISOString() })
+        }, 60_000)
         statutInterval = setInterval(async () => {
           const r = await fetch("/api/auth/me", { cache: "no-store" })
           if (!r.ok) { clearStatutInterval(); await markOffline(uid); await supabase.auth.signOut(); return }
