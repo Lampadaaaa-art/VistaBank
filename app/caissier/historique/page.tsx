@@ -1,12 +1,12 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { LayoutDashboard, ListOrdered, History, HelpCircle, Calendar, CheckCircle2, Search, ArrowUpRight } from 'lucide-react';
-import { AdminLogoutButton } from '@/components/admin-logout-button';
-import Link from 'next/link';
+import { Calendar, CheckCircle2, Search, ArrowUpRight } from 'lucide-react';
 import { useTickets } from '@/hooks/useTickets';
 import { useGuichets } from '@/hooks/useGuichets';
 import { useAuth } from '@/hooks/useAuth';
+import { CaissierNav } from '@/components/caissier-nav';
+
 function formatTime(ts?: string): string {
   if (!ts) return '—';
   return new Date(ts).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
@@ -29,7 +29,6 @@ export default function Historique() {
     user?.guichetId ? g.id === user.guichetId : g.caissierUid === user?.uid
   );
 
-  // Filtrer les tickets traités par ce caissier, triés du plus récent au plus ancien
   const mesTickets = useMemo(() => {
     return terminesTickets
       .filter(t => !user?.uid || t.caissierUid === user.uid)
@@ -53,59 +52,31 @@ export default function Historique() {
 
   return (
     <div className="bg-surface text-on-surface min-h-screen">
-      {/* Sidebar */}
-      <aside className="h-screen w-72 left-0 top-0 fixed bg-surface-container-low shadow-[0_20px_50px_rgba(17,28,45,0.06)] flex flex-col py-8 z-20">
-        <div className="px-6 mb-12">
-          <p className="text-primary font-headline text-2xl font-black tracking-tight">{guichetLabel}</p>
-          <p className="text-secondary text-xs font-bold uppercase tracking-widest mt-1">Hall Principal</p>
-        </div>
-        <nav className="flex-1">
-          <Link href="/caissier" className="flex items-center gap-3 text-on-surface/60 px-4 py-3 mx-4 mb-2 hover:bg-white/50 transition-all font-headline text-sm font-semibold tracking-wide translate-x-1 duration-200">
-            <LayoutDashboard className="w-5 h-5" />
-            Tableau de bord
-          </Link>
-          <Link href="/caissier/file-attente" className="flex items-center gap-3 text-on-surface/60 px-4 py-3 mx-4 mb-2 hover:bg-white/50 transition-all font-headline text-sm font-semibold tracking-wide translate-x-1 duration-200">
-            <ListOrdered className="w-5 h-5" />
-            File d&apos;attente
-          </Link>
-          <Link href="/caissier/historique" className="flex items-center gap-3 bg-surface-container-lowest text-primary-container rounded-xl px-4 py-3 shadow-sm mx-4 mb-2 font-headline text-sm font-semibold tracking-wide translate-x-1 duration-200">
-            <History className="w-5 h-5 fill-current" />
-            Historique
-          </Link>
-          <Link href="/caissier/assistance" className="flex items-center gap-3 text-on-surface/60 px-4 py-3 mx-4 mb-2 hover:bg-white/50 transition-all font-headline text-sm font-semibold tracking-wide translate-x-1 duration-200">
-            <HelpCircle className="w-5 h-5" />
-            Assistance
-          </Link>
-        </nav>
-        <div className="mt-auto px-6">
-          <AdminLogoutButton />
-        </div>
-      </aside>
+      <CaissierNav activeHref="/caissier/historique" guichetLabel={guichetLabel} />
 
-      {/* Main Content */}
-      <main className="ml-72 min-h-screen flex flex-col relative">
-        <header className="flex justify-between items-center w-full px-8 h-24 bg-surface border-b border-on-surface/5 sticky top-0 z-10">
-          <h2 className="font-headline tracking-tight font-bold text-2xl text-on-surface">Historique des opérations</h2>
-          <div className="flex items-center gap-4 border-l border-on-surface/10 pl-6">
-            <div className="flex flex-col items-end">
+      <main className="lg:ml-72 min-h-screen flex flex-col relative pb-20 lg:pb-0">
+        <header className="flex justify-between items-center w-full px-4 lg:px-8 h-16 lg:h-24 bg-surface border-b border-on-surface/5 sticky top-0 z-10">
+          <h2 className="font-headline tracking-tight font-bold text-lg lg:text-2xl text-on-surface">Historique des opérations</h2>
+          <div className="flex items-center gap-3 lg:gap-4 border-l border-on-surface/10 pl-3 lg:pl-6">
+            <div className="hidden lg:flex flex-col items-end">
               <span className="font-bold text-sm text-on-surface">{nomComplet}</span>
               <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Caissier</span>
             </div>
-            <div className="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center text-primary font-bold text-sm">
+            <div className="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-secondary-container flex items-center justify-center text-primary font-bold text-sm">
               {user ? `${user.prenom[0]}${user.nom[0]}` : '…'}
             </div>
           </div>
         </header>
 
-        <div className="p-10 max-w-6xl mx-auto w-full">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-6">
-            <div className="max-w-2xl">
-              <h3 className="text-4xl font-extrabold text-on-surface mb-3 tracking-tight font-headline">Clients Servis</h3>
-              <p className="text-secondary text-lg leading-relaxed">
+        <div className="p-4 lg:p-10 max-w-6xl mx-auto w-full">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 lg:mb-12 gap-4 lg:gap-6">
+            <div>
+              <h3 className="text-2xl lg:text-4xl font-extrabold text-on-surface mb-2 lg:mb-3 tracking-tight font-headline">Clients Servis</h3>
+              <p className="text-secondary text-base lg:text-lg leading-relaxed">
                 {loading ? 'Chargement…' : `${mesTickets.length} ticket${mesTickets.length !== 1 ? 's' : ''} traité${mesTickets.length !== 1 ? 's' : ''} aujourd'hui`}
               </p>
             </div>
-            <div className="flex gap-4 w-full md:w-auto">
+            <div className="flex gap-3 w-full md:w-auto">
               <div className="flex items-center bg-surface-container-lowest rounded-full px-4 py-2 shadow-[0_10px_30px_rgba(17,28,45,0.04)] shrink-0">
                 <Calendar className="w-5 h-5 text-secondary mr-3" />
                 <span className="text-sm font-bold text-on-surface">
@@ -113,7 +84,7 @@ export default function Historique() {
                 </span>
               </div>
               <div className="flex items-center bg-surface-container-lowest rounded-full px-4 py-2 shadow-[0_10px_30px_rgba(17,28,45,0.04)] flex-1 md:flex-none">
-                <Search className="w-5 h-5 text-secondary mr-3" />
+                <Search className="w-5 h-5 text-secondary mr-3 shrink-0" />
                 <input
                   type="text"
                   value={search}
@@ -125,7 +96,41 @@ export default function Historique() {
             </div>
           </div>
 
-          <div className="bg-surface-container-lowest rounded-[1.5rem] shadow-[0_20px_50px_rgba(17,28,45,0.06)] overflow-hidden">
+          {/* Vue mobile — cartes */}
+          <div className="lg:hidden space-y-3">
+            {loading ? (
+              <p className="text-center text-secondary py-8">Chargement…</p>
+            ) : filtered.length === 0 ? (
+              <p className="text-center text-secondary py-8">Aucun ticket traité</p>
+            ) : filtered.map(ticket => (
+              <div key={ticket.id} className="bg-surface-container-lowest rounded-2xl p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-headline font-black text-xl text-on-surface">{ticket.numero}</span>
+                  <div className="flex items-center gap-1.5">
+                    {ticket.statut === 'termine' ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                        <span className="text-xs font-bold text-emerald-600">Terminé</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowUpRight className="w-4 h-4 text-orange-500" />
+                        <span className="text-xs font-bold text-orange-600">Transféré</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <p className="text-sm text-secondary mb-2">{ticket.serviceName}</p>
+                <div className="flex items-center gap-4 text-xs text-slate-400">
+                  <span>Appelé à {formatTime(ticket.appelleAt)}</span>
+                  <span>Durée : {formatDuration(ticket.tempsService)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Vue desktop — tableau */}
+          <div className="hidden lg:block bg-surface-container-lowest rounded-[1.5rem] shadow-[0_20px_50px_rgba(17,28,45,0.06)] overflow-hidden">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-surface-container-low">

@@ -42,19 +42,19 @@ function useTime() {
   return time;
 }
 
-function SmallCard({ service, onClick }: { service: Service; onClick: () => void }) {
+function ServiceCard({ service, onClick }: { service: Service; onClick: () => void }) {
   const Icon = CODE_ICONS[service.code] ?? Building2;
   return (
     <button
       onClick={onClick}
-      className="col-span-4 row-span-1 kiosk-btn bg-white rounded-3xl p-6 flex items-center gap-6 shadow-sm border border-slate-200 hover:border-primary hover:shadow-md group transition-all"
+      className="kiosk-btn bg-white rounded-2xl lg:rounded-3xl p-4 lg:p-6 flex items-center gap-4 lg:gap-6 shadow-sm border border-slate-200 hover:border-primary hover:shadow-md group transition-all w-full"
     >
-      <div className="w-16 h-16 bg-primary-fixed flex items-center justify-center rounded-2xl group-hover:bg-primary transition-colors shrink-0">
-        <Icon className="text-primary w-8 h-8 group-hover:text-white transition-colors" />
+      <div className="w-12 h-12 lg:w-16 lg:h-16 bg-primary-fixed flex items-center justify-center rounded-xl lg:rounded-2xl group-hover:bg-primary transition-colors shrink-0">
+        <Icon className="text-primary w-6 h-6 lg:w-8 lg:h-8 group-hover:text-white transition-colors" />
       </div>
       <div className="text-left">
-        <span className="block text-xs font-bold text-primary tracking-widest mb-1">{service.code}</span>
-        <span className="block text-xl font-headline font-extrabold text-on-surface leading-tight">{service.nom}</span>
+        <span className="block text-[10px] lg:text-xs font-bold text-primary tracking-widest mb-0.5 lg:mb-1">{service.code}</span>
+        <span className="block text-base lg:text-xl font-headline font-extrabold text-on-surface leading-tight">{service.nom}</span>
       </div>
     </button>
   );
@@ -162,16 +162,16 @@ export default function BorneClient() {
       await supabase.auth.signOut();
       await fetch('/api/auth/logout', { method: 'POST' });
     } finally {
-      router.push('/');
+      router.push('/login');
     }
   };
 
   /* ── Ticket view ─────────────────────────────────────────────── */
   if (ticket) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-12 relative overflow-hidden bg-[#fdfafb]">
-    <div className="fixed inset-0 z-0 opacity-40 pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(230, 0, 66, 0.03) 20px, rgba(230, 0, 66, 0.03) 40px)' }}></div>
-        <div id="ticket-card" className="bg-white w-[340px] rounded-[2rem] shadow-[0_20px_60px_rgba(0,0,0,0.05)] flex flex-col relative z-10 animate-in zoom-in duration-300">
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 lg:p-12 relative overflow-hidden bg-[#fdfafb]">
+        <div className="fixed inset-0 z-0 opacity-40 pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(230, 0, 66, 0.03) 20px, rgba(230, 0, 66, 0.03) 40px)' }}></div>
+        <div id="ticket-card" className="bg-white w-full max-w-[340px] rounded-[2rem] shadow-[0_20px_60px_rgba(0,0,0,0.05)] flex flex-col relative z-10 animate-in zoom-in duration-300">
           <div className="p-8 pb-6 flex flex-col items-center text-center">
             <div className="flex items-center gap-2 text-primary font-bold text-base mb-8">
               <Ticket className="w-5 h-5 fill-current" /> Vista Gui
@@ -197,7 +197,7 @@ export default function BorneClient() {
             <p className="text-[7px] text-slate-400 tracking-[0.2em]">01234567890123456789</p>
           </div>
         </div>
-        <div className="mt-6 flex flex-col gap-3 w-[340px] relative z-10 animate-in slide-in-from-bottom-4 duration-500 delay-150 fill-mode-both">
+        <div className="mt-6 flex flex-col gap-3 w-full max-w-[340px] relative z-10 animate-in slide-in-from-bottom-4 duration-500 delay-150 fill-mode-both">
           <button onClick={handleDownloadTicket} disabled={pdfLoading} className="w-full py-4 bg-primary text-white rounded-full font-bold text-base flex items-center justify-center gap-3 shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed">
             {pdfLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Printer className="w-5 h-5" />}
             {pdfLoading ? 'Génération…' : 'Télécharger le ticket'}
@@ -215,67 +215,69 @@ export default function BorneClient() {
     return (
       <div className="min-h-screen bg-white flex flex-col relative">
         <div className="fixed inset-0 z-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#E60042 1px, transparent 1px)', backgroundSize: '32px 32px' }}></div>
-        <header className="h-28 flex items-center justify-between px-16 bg-white border-b border-surface-container relative z-10">
-          <div className="flex items-center gap-5">
-            <div className="w-14 h-14 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-              <Home className="text-white w-8 h-8" />
+
+        <header className="h-16 lg:h-28 flex items-center justify-between px-4 lg:px-16 bg-white border-b border-surface-container relative z-10">
+          <div className="flex items-center gap-3 lg:gap-5">
+            <div className="w-10 h-10 lg:w-14 lg:h-14 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+              <Home className="text-white w-5 h-5 lg:w-8 lg:h-8" />
             </div>
             <div>
-              <h1 className="font-headline font-extrabold text-2xl tracking-tight text-on-surface">Banque Vista Gui</h1>
-              <p className="text-primary font-bold tracking-[0.2em] text-[10px] uppercase">L&apos;Excellence Institutionnelle</p>
+              <h1 className="font-headline font-extrabold text-base lg:text-2xl tracking-tight text-on-surface">Banque Vista Gui</h1>
+              <p className="text-primary font-bold tracking-[0.2em] text-[8px] lg:text-[10px] uppercase hidden sm:block">L&apos;Excellence Institutionnelle</p>
             </div>
           </div>
-          <div className="flex items-center gap-6">
-            <div className="text-right">
-              <p className="text-2xl font-headline font-extrabold text-on-surface">{timeStr}</p>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider capitalize">{dateStr}</p>
+          <div className="flex items-center gap-3 lg:gap-6">
+            <div className="text-right hidden sm:block">
+              <p className="text-lg lg:text-2xl font-headline font-extrabold text-on-surface">{timeStr}</p>
+              <p className="text-[10px] lg:text-xs font-bold text-slate-500 uppercase tracking-wider capitalize hidden lg:block">{dateStr}</p>
             </div>
             <button onClick={handleLogout} title="Déconnexion" className="w-10 h-10 flex items-center justify-center rounded-full text-slate-300 hover:text-primary hover:bg-slate-50 transition-colors">
               <LogOut className="w-5 h-5" />
             </button>
           </div>
         </header>
-        <main className="flex-1 flex flex-col items-center justify-center p-8 relative z-10">
+
+        <main className="flex-1 flex flex-col items-center justify-center p-4 lg:p-8 relative z-10">
           <div className="w-full max-w-4xl animate-in fade-in slide-in-from-bottom-8 duration-500">
-            <button onClick={() => setSelectedService(null)} className="flex items-center gap-2 text-slate-500 hover:text-primary mb-8 font-bold uppercase tracking-widest text-sm transition-colors">
+            <button onClick={() => setSelectedService(null)} className="flex items-center gap-2 text-slate-500 hover:text-primary mb-6 lg:mb-8 font-bold uppercase tracking-widest text-sm transition-colors">
               <ArrowLeft className="w-5 h-5" /> Retour aux services
             </button>
-            <div className="text-center mb-12">
-              <h2 className="font-headline font-black text-5xl text-on-surface mb-4">Avez-vous une priorité ?</h2>
-              <p className="text-xl text-slate-500 font-medium">Service sélectionné : <span className="text-primary font-bold">{selectedService.name}</span></p>
+            <div className="text-center mb-6 lg:mb-12">
+              <h2 className="font-headline font-black text-3xl lg:text-5xl text-on-surface mb-3 lg:mb-4">Avez-vous une priorité ?</h2>
+              <p className="text-base lg:text-xl text-slate-500 font-medium">Service sélectionné : <span className="text-primary font-bold">{selectedService.name}</span></p>
             </div>
             {ticketError && (
               <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm font-medium">{ticketError}</div>
             )}
-            <div className="flex flex-col gap-6">
-              <button onClick={() => handlePriorityClick('Standard')} disabled={loading} className="w-full bg-white rounded-3xl p-8 flex items-center justify-center gap-4 shadow-sm border border-slate-200 hover:border-primary hover:shadow-md group transition-all disabled:opacity-60 disabled:cursor-not-allowed">
-                {loading ? <Loader2 className="w-8 h-8 text-primary animate-spin" /> : <User className="text-slate-400 w-8 h-8 group-hover:text-primary transition-colors" />}
-                <span className="text-2xl font-headline font-extrabold text-on-surface">Non, je suis un client standard</span>
+            <div className="flex flex-col gap-4 lg:gap-6">
+              <button onClick={() => handlePriorityClick('Standard')} disabled={loading} className="w-full bg-white rounded-2xl lg:rounded-3xl p-5 lg:p-8 flex items-center justify-center gap-4 shadow-sm border border-slate-200 hover:border-primary hover:shadow-md group transition-all disabled:opacity-60 disabled:cursor-not-allowed">
+                {loading ? <Loader2 className="w-6 h-6 lg:w-8 lg:h-8 text-primary animate-spin" /> : <User className="text-slate-400 w-6 h-6 lg:w-8 lg:h-8 group-hover:text-primary transition-colors" />}
+                <span className="text-xl lg:text-2xl font-headline font-extrabold text-on-surface">Non, je suis un client standard</span>
               </button>
-              <div className="grid grid-cols-2 gap-6">
-                <button onClick={() => handlePriorityClick('VIP')} disabled={loading} className="bg-white rounded-3xl p-6 flex items-center gap-6 shadow-sm border border-slate-200 hover:border-purple-500 hover:shadow-md group transition-all disabled:opacity-60">
-                  <div className="w-16 h-16 bg-purple-50 flex items-center justify-center rounded-2xl group-hover:bg-purple-500 transition-colors">
-                    <Star className="text-purple-500 w-8 h-8 group-hover:text-white" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-6">
+                <button onClick={() => handlePriorityClick('VIP')} disabled={loading} className="bg-white rounded-2xl lg:rounded-3xl p-4 lg:p-6 flex items-center gap-4 lg:gap-6 shadow-sm border border-slate-200 hover:border-purple-500 hover:shadow-md group transition-all disabled:opacity-60">
+                  <div className="w-12 h-12 lg:w-16 lg:h-16 bg-purple-50 flex items-center justify-center rounded-xl lg:rounded-2xl group-hover:bg-purple-500 transition-colors shrink-0">
+                    <Star className="text-purple-500 w-6 h-6 lg:w-8 lg:h-8 group-hover:text-white" />
                   </div>
-                  <span className="text-xl font-headline font-extrabold text-on-surface">Client VIP</span>
+                  <span className="text-lg lg:text-xl font-headline font-extrabold text-on-surface">Client VIP</span>
                 </button>
-                <button onClick={() => handlePriorityClick('Femme Enceinte')} disabled={loading} className="bg-white rounded-3xl p-6 flex items-center gap-6 shadow-sm border border-slate-200 hover:border-pink-500 hover:shadow-md group transition-all disabled:opacity-60">
-                  <div className="w-16 h-16 bg-pink-50 flex items-center justify-center rounded-2xl group-hover:bg-pink-500 transition-colors">
-                    <Baby className="text-pink-500 w-8 h-8 group-hover:text-white" />
+                <button onClick={() => handlePriorityClick('Femme Enceinte')} disabled={loading} className="bg-white rounded-2xl lg:rounded-3xl p-4 lg:p-6 flex items-center gap-4 lg:gap-6 shadow-sm border border-slate-200 hover:border-pink-500 hover:shadow-md group transition-all disabled:opacity-60">
+                  <div className="w-12 h-12 lg:w-16 lg:h-16 bg-pink-50 flex items-center justify-center rounded-xl lg:rounded-2xl group-hover:bg-pink-500 transition-colors shrink-0">
+                    <Baby className="text-pink-500 w-6 h-6 lg:w-8 lg:h-8 group-hover:text-white" />
                   </div>
-                  <span className="text-xl font-headline font-extrabold text-on-surface">Femme Enceinte</span>
+                  <span className="text-lg lg:text-xl font-headline font-extrabold text-on-surface">Femme Enceinte</span>
                 </button>
-                <button onClick={() => handlePriorityClick('Personne Âgée')} disabled={loading} className="bg-white rounded-3xl p-6 flex items-center gap-6 shadow-sm border border-slate-200 hover:border-blue-500 hover:shadow-md group transition-all disabled:opacity-60">
-                  <div className="w-16 h-16 bg-blue-50 flex items-center justify-center rounded-2xl group-hover:bg-blue-500 transition-colors">
-                    <HeartPulse className="text-blue-500 w-8 h-8 group-hover:text-white" />
+                <button onClick={() => handlePriorityClick('Personne Âgée')} disabled={loading} className="bg-white rounded-2xl lg:rounded-3xl p-4 lg:p-6 flex items-center gap-4 lg:gap-6 shadow-sm border border-slate-200 hover:border-blue-500 hover:shadow-md group transition-all disabled:opacity-60">
+                  <div className="w-12 h-12 lg:w-16 lg:h-16 bg-blue-50 flex items-center justify-center rounded-xl lg:rounded-2xl group-hover:bg-blue-500 transition-colors shrink-0">
+                    <HeartPulse className="text-blue-500 w-6 h-6 lg:w-8 lg:h-8 group-hover:text-white" />
                   </div>
-                  <span className="text-xl font-headline font-extrabold text-on-surface">Personne Âgée</span>
+                  <span className="text-lg lg:text-xl font-headline font-extrabold text-on-surface">Personne Âgée</span>
                 </button>
-                <button onClick={() => handlePriorityClick('Handicap / Urgence')} disabled={loading} className="bg-white rounded-3xl p-6 flex items-center gap-6 shadow-sm border border-slate-200 hover:border-primary hover:shadow-md group transition-all disabled:opacity-60">
-                  <div className="w-16 h-16 bg-primary-fixed flex items-center justify-center rounded-2xl group-hover:bg-primary transition-colors">
-                    <ShieldAlert className="text-primary w-8 h-8 group-hover:text-white" />
+                <button onClick={() => handlePriorityClick('Handicap / Urgence')} disabled={loading} className="bg-white rounded-2xl lg:rounded-3xl p-4 lg:p-6 flex items-center gap-4 lg:gap-6 shadow-sm border border-slate-200 hover:border-primary hover:shadow-md group transition-all disabled:opacity-60">
+                  <div className="w-12 h-12 lg:w-16 lg:h-16 bg-primary-fixed flex items-center justify-center rounded-xl lg:rounded-2xl group-hover:bg-primary transition-colors shrink-0">
+                    <ShieldAlert className="text-primary w-6 h-6 lg:w-8 lg:h-8 group-hover:text-white" />
                   </div>
-                  <span className="text-xl font-headline font-extrabold text-on-surface">Handicap / Urgence</span>
+                  <span className="text-lg lg:text-xl font-headline font-extrabold text-on-surface">Handicap / Urgence</span>
                 </button>
               </div>
             </div>
@@ -286,8 +288,6 @@ export default function BorneClient() {
   }
 
   /* ── Service selection view ──────────────────────────────────── */
-  // Sort by ordre; layout: [0]=small, [1]=small, [2]=featured (col-span-4 row-span-2),
-  // [3]=wide (col-span-8), [4+]=small cards appended at the bottom
   const sorted = [...services].sort((a, b) => a.ordre - b.ordre);
   const s0 = sorted[0];
   const s1 = sorted[1];
@@ -300,20 +300,20 @@ export default function BorneClient() {
       <div className="fixed inset-0 z-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#E60042 1px, transparent 1px)', backgroundSize: '32px 32px' }}></div>
 
       {/* Header */}
-      <header className="h-28 flex items-center justify-between px-16 bg-white border-b border-surface-container relative z-10">
-        <div className="flex items-center gap-5">
-          <div className="w-14 h-14 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-            <Home className="text-white w-8 h-8" />
+      <header className="h-16 lg:h-28 flex items-center justify-between px-4 lg:px-16 bg-white border-b border-surface-container relative z-10">
+        <div className="flex items-center gap-3 lg:gap-5">
+          <div className="w-10 h-10 lg:w-14 lg:h-14 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+            <Home className="text-white w-5 h-5 lg:w-8 lg:h-8" />
           </div>
           <div>
-            <h1 className="font-headline font-extrabold text-2xl tracking-tight text-on-surface">Banque Vista Gui</h1>
-            <p className="text-primary font-bold tracking-[0.2em] text-[10px] uppercase">L&apos;Excellence Institutionnelle</p>
+            <h1 className="font-headline font-extrabold text-base lg:text-2xl tracking-tight text-on-surface">Banque Vista Gui</h1>
+            <p className="text-primary font-bold tracking-[0.2em] text-[8px] lg:text-[10px] uppercase hidden sm:block">L&apos;Excellence Institutionnelle</p>
           </div>
         </div>
-        <div className="flex items-center gap-6">
-          <div className="text-right">
-            <p className="text-2xl font-headline font-extrabold text-on-surface">{timeStr}</p>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider capitalize">{dateStr}</p>
+        <div className="flex items-center gap-3 lg:gap-6">
+          <div className="text-right hidden sm:block">
+            <p className="text-lg lg:text-2xl font-headline font-extrabold text-on-surface">{timeStr}</p>
+            <p className="text-[10px] lg:text-xs font-bold text-slate-500 uppercase tracking-wider capitalize hidden lg:block">{dateStr}</p>
           </div>
           <button onClick={handleLogout} title="Déconnexion" className="w-10 h-10 flex items-center justify-center rounded-full text-slate-300 hover:text-primary hover:bg-slate-50 transition-colors">
             <LogOut className="w-5 h-5" />
@@ -322,11 +322,11 @@ export default function BorneClient() {
       </header>
 
       {/* Main */}
-      <main className="flex-1 flex items-center justify-center p-8 relative z-10">
+      <main className="flex-1 flex items-center justify-center p-4 lg:p-8 relative z-10">
         <div className="w-full max-w-6xl animate-in fade-in slide-in-from-bottom-8 duration-500">
-          <div className="text-center mb-16">
-            <h2 className="font-headline font-black text-5xl text-on-surface mb-4">Bienvenue</h2>
-            <p className="text-xl text-slate-500 font-medium">Veuillez choisir un service pour obtenir votre numéro de passage</p>
+          <div className="text-center mb-8 lg:mb-16">
+            <h2 className="font-headline font-black text-3xl lg:text-5xl text-on-surface mb-3 lg:mb-4">Bienvenue</h2>
+            <p className="text-base lg:text-xl text-slate-500 font-medium">Veuillez choisir un service pour obtenir votre numéro de passage</p>
           </div>
 
           {servicesLoading ? (
@@ -344,83 +344,81 @@ export default function BorneClient() {
               <span className="text-xs mt-2 block">Ajoutez des services depuis le panneau Admin → Services.</span>
             </div>
           ) : (
-            /* grid-cols-12: chaque colonne = 1/12.
-               small = col-span-4 (1/3), wide = col-span-8 (2/3), featured = col-span-4 row-span-2.
-               Ordre DOM : s0, s1, featured, wide, ...rest  → auto-placement CSS positionne correctement. */
-            <div className="grid grid-cols-12 gap-6 auto-rows-[160px]">
+            <>
+              {/* Vue mobile / tablette — liste simple, cachée sur desktop */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:hidden">
+                {sorted.map(service => (
+                  <ServiceCard key={service.code} service={service} onClick={() => handleServiceClick(service.code, service.nom)} />
+                ))}
+              </div>
 
-              {/* Petite carte 1 — col 1-4, ligne 1 */}
-              {s0 && <SmallCard service={s0} onClick={() => handleServiceClick(s0.code, s0.nom)} />}
-
-              {/* Petite carte 2 — col 5-8, ligne 1 */}
-              {s1 && <SmallCard service={s1} onClick={() => handleServiceClick(s1.code, s1.nom)} />}
-
-              {/* Carte vedette — col 9-12, lignes 1-2 (rouge, grande) */}
-              {featured && (() => {
-                const Icon = CODE_ICONS[featured.code] ?? Building2;
-                return (
+              {/* Vue desktop — grid asymétrique originale, cachée sur mobile */}
+              <div className="hidden lg:grid grid-cols-12 gap-6 auto-rows-[160px]">
+                {s0 && (
                   <button
-                    onClick={() => handleServiceClick(featured.code, featured.nom)}
-                    className="col-span-4 row-span-2 bg-primary rounded-3xl p-10 flex flex-col justify-between shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all active:scale-[0.98]"
+                    onClick={() => handleServiceClick(s0.code, s0.nom)}
+                    className="col-span-4 row-span-1 kiosk-btn bg-white rounded-3xl p-6 flex items-center gap-6 shadow-sm border border-slate-200 hover:border-primary hover:shadow-md group transition-all"
                   >
-                    <div className="w-20 h-20 bg-white/20 flex items-center justify-center rounded-2xl backdrop-blur-md">
-                      <Icon className="text-white w-10 h-10" />
-                    </div>
-                    <div>
-                      <span className="block text-xs font-bold text-white/70 tracking-widest mb-2">{featured.code}</span>
-                      <span className="block text-3xl font-headline font-extrabold text-white leading-tight">{featured.nom}</span>
-                      <p className="mt-4 text-white/80 text-sm font-medium">Rejoignez-nous aujourd&apos;hui</p>
-                    </div>
+                    {(() => { const Icon = CODE_ICONS[s0.code] ?? Building2; return (<><div className="w-16 h-16 bg-primary-fixed flex items-center justify-center rounded-2xl group-hover:bg-primary transition-colors shrink-0"><Icon className="text-primary w-8 h-8 group-hover:text-white transition-colors" /></div><div className="text-left"><span className="block text-xs font-bold text-primary tracking-widest mb-1">{s0.code}</span><span className="block text-xl font-headline font-extrabold text-on-surface leading-tight">{s0.nom}</span></div></>); })()}
                   </button>
-                );
-              })()}
-
-              {/* Carte large — col 1-8, ligne 2 */}
-              {wide && (() => {
-                const Icon = CODE_ICONS[wide.code] ?? Building2;
-                return (
+                )}
+                {s1 && (
                   <button
-                    onClick={() => handleServiceClick(wide.code, wide.nom)}
-                    className="col-span-8 row-span-1 bg-slate-50 rounded-3xl p-6 flex items-center justify-between shadow-sm border border-slate-200 hover:border-primary group transition-all active:scale-[0.98]"
+                    onClick={() => handleServiceClick(s1.code, s1.nom)}
+                    className="col-span-4 row-span-1 kiosk-btn bg-white rounded-3xl p-6 flex items-center gap-6 shadow-sm border border-slate-200 hover:border-primary hover:shadow-md group transition-all"
                   >
-                    <div className="flex items-center gap-6">
-                      <div className="w-16 h-16 bg-white flex items-center justify-center rounded-2xl shadow-sm group-hover:bg-primary transition-colors">
-                        <Icon className="text-primary w-8 h-8 group-hover:text-white transition-colors" />
-                      </div>
-                      <div className="text-left">
-                        <span className="block text-xs font-bold text-primary tracking-widest mb-1">{wide.code}</span>
-                        <span className="block text-2xl font-headline font-extrabold text-on-surface">{wide.nom}</span>
-                      </div>
-                    </div>
-                    <ArrowRight className="text-primary w-8 h-8 mr-4 group-hover:translate-x-2 transition-transform" />
+                    {(() => { const Icon = CODE_ICONS[s1.code] ?? Building2; return (<><div className="w-16 h-16 bg-primary-fixed flex items-center justify-center rounded-2xl group-hover:bg-primary transition-colors shrink-0"><Icon className="text-primary w-8 h-8 group-hover:text-white transition-colors" /></div><div className="text-left"><span className="block text-xs font-bold text-primary tracking-widest mb-1">{s1.code}</span><span className="block text-xl font-headline font-extrabold text-on-surface leading-tight">{s1.nom}</span></div></>); })()}
                   </button>
-                );
-              })()}
-
-              {/* Cartes supplémentaires — ligne 3+, col-span-4 chacune */}
-              {rest.map(service => (
-                <SmallCard key={service.code} service={service} onClick={() => handleServiceClick(service.code, service.nom)} />
-              ))}
-            </div>
+                )}
+                {featured && (() => {
+                  const Icon = CODE_ICONS[featured.code] ?? Building2;
+                  return (
+                    <button onClick={() => handleServiceClick(featured.code, featured.nom)} className="col-span-4 row-span-2 bg-primary rounded-3xl p-10 flex flex-col justify-between shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all active:scale-[0.98]">
+                      <div className="w-20 h-20 bg-white/20 flex items-center justify-center rounded-2xl backdrop-blur-md"><Icon className="text-white w-10 h-10" /></div>
+                      <div><span className="block text-xs font-bold text-white/70 tracking-widest mb-2">{featured.code}</span><span className="block text-3xl font-headline font-extrabold text-white leading-tight">{featured.nom}</span><p className="mt-4 text-white/80 text-sm font-medium">Rejoignez-nous aujourd&apos;hui</p></div>
+                    </button>
+                  );
+                })()}
+                {wide && (() => {
+                  const Icon = CODE_ICONS[wide.code] ?? Building2;
+                  return (
+                    <button onClick={() => handleServiceClick(wide.code, wide.nom)} className="col-span-8 row-span-1 bg-slate-50 rounded-3xl p-6 flex items-center justify-between shadow-sm border border-slate-200 hover:border-primary group transition-all active:scale-[0.98]">
+                      <div className="flex items-center gap-6"><div className="w-16 h-16 bg-white flex items-center justify-center rounded-2xl shadow-sm group-hover:bg-primary transition-colors"><Icon className="text-primary w-8 h-8 group-hover:text-white transition-colors" /></div><div className="text-left"><span className="block text-xs font-bold text-primary tracking-widest mb-1">{wide.code}</span><span className="block text-2xl font-headline font-extrabold text-on-surface">{wide.nom}</span></div></div>
+                      <ArrowRight className="text-primary w-8 h-8 mr-4 group-hover:translate-x-2 transition-transform" />
+                    </button>
+                  );
+                })()}
+                {rest.map(service => {
+                  const Icon = CODE_ICONS[service.code] ?? Building2;
+                  return (
+                    <button key={service.code} onClick={() => handleServiceClick(service.code, service.nom)} className="col-span-4 row-span-1 kiosk-btn bg-white rounded-3xl p-6 flex items-center gap-6 shadow-sm border border-slate-200 hover:border-primary hover:shadow-md group transition-all">
+                      <div className="w-16 h-16 bg-primary-fixed flex items-center justify-center rounded-2xl group-hover:bg-primary transition-colors shrink-0"><Icon className="text-primary w-8 h-8 group-hover:text-white transition-colors" /></div>
+                      <div className="text-left"><span className="block text-xs font-bold text-primary tracking-widest mb-1">{service.code}</span><span className="block text-xl font-headline font-extrabold text-on-surface leading-tight">{service.nom}</span></div>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="h-24 bg-white border-t border-surface-container px-16 flex items-center justify-between relative z-10">
-        <div className="flex items-center gap-10">
-          <div className="flex items-center gap-3 text-slate-500">
-            <Globe className="w-6 h-6 text-primary" />
-            <span className="font-bold text-sm uppercase tracking-wider">Français</span>
+      <footer className="h-16 lg:h-24 bg-white border-t border-surface-container px-4 lg:px-16 flex items-center justify-between relative z-10">
+        <div className="flex items-center gap-4 lg:gap-10">
+          <div className="flex items-center gap-2 lg:gap-3 text-slate-500">
+            <Globe className="w-5 h-5 lg:w-6 lg:h-6 text-primary" />
+            <span className="font-bold text-xs lg:text-sm uppercase tracking-wider">Français</span>
           </div>
-          <div className="flex items-center gap-3 text-slate-500">
+          <div className="hidden sm:flex items-center gap-3 text-slate-500">
             <ShieldCheck className="w-6 h-6 text-primary" />
             <span className="font-bold text-sm uppercase tracking-wider">Session Sécurisée</span>
           </div>
         </div>
-        <div className="flex items-center gap-4 text-on-surface font-bold text-sm uppercase tracking-wider">
-          <CircleHelp className="w-5 h-5 text-primary" />
-          <span>Besoin d&apos;aide ? Appelez un conseiller</span>
+        <div className="flex items-center gap-2 lg:gap-4 text-on-surface font-bold text-xs lg:text-sm uppercase tracking-wider">
+          <CircleHelp className="w-4 h-4 lg:w-5 lg:h-5 text-primary" />
+          <span className="hidden sm:inline">Besoin d&apos;aide ? Appelez un conseiller</span>
+          <span className="sm:hidden">Aide</span>
         </div>
       </footer>
     </div>
