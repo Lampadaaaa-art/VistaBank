@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useMemo } from 'react';
-import { LayoutDashboard, ListOrdered, History, HelpCircle, Megaphone, PauseCircle, PlayCircle, ArrowUpRight, CheckCircle2, User, X } from 'lucide-react';
+import { LayoutDashboard, ListOrdered, History, HelpCircle, Megaphone, PauseCircle, PlayCircle, ArrowUpRight, CheckCircle2, User, Volume2 } from 'lucide-react';
 import { AdminLogoutButton } from '@/components/admin-logout-button';
 import Link from 'next/link';
 import { useTickets } from '@/hooks/useTickets';
 import { useGuichets } from '@/hooks/useGuichets';
 import { useStats } from '@/hooks/useStats';
 import { useAuth } from '@/hooks/useAuth';
-import { useServices } from '@/hooks/useServices';
 
 const PRIORITY_ORDER: Record<string, number> = {
   handicap: 1, enceinte: 2, age: 3, vip: 4, standard: 5,
@@ -26,11 +25,8 @@ export default function Caissier() {
   const { tickets: enCoursTickets, refresh: refreshEnCours } = useTickets({ statut: "en_cours" });
   const { guichets, loading: guichetsLoading, refresh: refreshGuichets } = useGuichets();
   const { stats } = useStats();
-  const { services } = useServices(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [showTransferModal, setShowTransferModal] = useState(false);
-  const [transferCode, setTransferCode] = useState('');
 
   const monGuichet = guichets.find(g =>
     user?.guichetId ? g.id === user.guichetId : g.caissierUid === user?.uid
@@ -52,7 +48,6 @@ export default function Caissier() {
   const queuePreview = sortedAttenteTickets.slice(0, 3);
 
   const handleAppelerSuivant = async () => {
-    console.log('[Appeler] click — monGuichet:', monGuichet, '| attenteTickets:', attenteTickets.length, '| actionLoading:', actionLoading);
     if (actionLoading) return;
     setActionError(null);
 
@@ -60,36 +55,24 @@ export default function Caissier() {
       setActionError("Aucun guichet n'est assigné à votre compte. Contactez un administrateur.");
       return;
     }
-    if (!attenteTickets.length) {
-      setActionError("Aucun ticket en attente dans la file d'attente.");
-      return;
-    }
 
     setActionLoading(true);
     try {
-      // Terminer automatiquement le ticket en cours avant d'en appeler un nouveau
-      if (ticketActuel) {
-        const termRes = await fetch(`/api/tickets/${ticketActuel.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ statut: "termine" }),
-        });
-        if (!termRes.ok) {
-          const d = await termRes.json().catch(() => ({}));
-          setActionError(d.error ?? `Erreur ${termRes.status}`);
-          return;
-        }
-      }
-
-      const prochainTicket = sortedAttenteTickets[0];
-      const res = await fetch(`/api/tickets/${prochainTicket.id}`, {
-        method: 'PATCH',
+      // Sélection + réservation atomique côté serveur — empêche les doublons entre guichets simultanés
+      const res = await fetch('/api/tickets/next', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ statut: "en_cours", guichetId: monGuichet.id }),
+        body: JSON.stringify({ guichetId: monGuichet.id }),
       });
+      const d = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        setActionError(d.error ?? `Erreur ${res.status}`);
+        if (res.status === 404) {
+          setActionError("Aucun ticket en attente dans la file d'attente.");
+        } else if (res.status === 409) {
+          setActionError("Tous les tickets viennent d'être pris. Réessayez dans un instant.");
+        } else {
+          setActionError(d.error ?? `Erreur ${res.status}`);
+        }
       } else {
         refreshAttente();
         refreshEnCours();
@@ -150,41 +133,22 @@ export default function Caissier() {
     }
   };
 
-  const handleTransferer = () => {
+  const handleRelancerAppel = async () => {
     if (!ticketActuel || actionLoading) return;
-    setTransferCode('');
-    setShowTransferModal(true);
-  };
-
-  const handleConfirmTransfer = async () => {
-    if (!ticketActuel || !transferCode || actionLoading) return;
-    const targetService = services.find(s => s.code === transferCode);
-    if (!targetService) return;
     setActionLoading(true);
     setActionError(null);
     try {
-      const res1 = await fetch(`/api/tickets/${ticketActuel.id}`, {
+      const res = await fetch(`/api/tickets/${ticketActuel.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ statut: "transfere" }),
+        body: JSON.stringify({ relance: true }),
       });
-      if (!res1.ok) {
-        const d = await res1.json().catch(() => ({}));
-        setActionError(d.error ?? `Erreur ${res1.status}`);
-        return;
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setActionError(d.error ?? `Erreur ${res.status}`);
+      } else {
+        refreshEnCours();
       }
-      await fetch('/api/public/tickets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          serviceCode: targetService.code,
-          serviceName: targetService.nom,
-          priorite: ticketActuel.priorite,
-        }),
-      });
-      setShowTransferModal(false);
-      refreshEnCours();
-      refreshAttente();
     } catch {
       setActionError('Erreur réseau. Vérifiez votre connexion.');
     } finally {
@@ -282,12 +246,12 @@ export default function Caissier() {
                 <span>{monGuichet?.statut === 'pause' ? 'Reprendre' : 'Pause'}</span>
               </button>
               <button
-                onClick={handleTransferer}
+                onClick={handleRelancerAppel}
                 disabled={!ticketActuel || actionLoading}
                 className="flex flex-col items-center justify-center gap-3 p-6 bg-white rounded-xl text-slate-600 font-headline font-semibold hover:bg-slate-50 transition-colors border border-slate-100 disabled:opacity-50"
               >
-                <ArrowUpRight className="w-8 h-8" />
-                <span>Transférer</span>
+                <Volume2 className="w-8 h-8" />
+                <span>Relancer</span>
               </button>
               <button
                 onClick={handleTerminer}
@@ -350,42 +314,7 @@ export default function Caissier() {
         </div>
       </main>
 
-      {/* Modal Transfert */}
-      {showTransferModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-8 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h3 className="font-headline font-black text-2xl text-slate-900">Transférer le ticket</h3>
-                <p className="text-slate-500 text-sm mt-1">Choisissez le service cible pour <span className="font-bold text-primary">{ticketActuel?.numero}</span>.</p>
-              </div>
-              <button onClick={() => setShowTransferModal(false)} className="p-2 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-100 transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-8 space-y-3 max-h-80 overflow-y-auto">
-              {services.filter(s => s.code !== ticketActuel?.serviceCode).map(s => (
-                <button
-                  key={s.code}
-                  onClick={() => setTransferCode(s.code)}
-                  className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all text-left ${transferCode === s.code ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-slate-300'}`}
-                >
-                  <div className="w-10 h-10 rounded-xl bg-primary-fixed text-primary font-headline font-black text-lg flex items-center justify-center shrink-0">
-                    {s.code}
-                  </div>
-                  <span className="font-bold text-on-surface">{s.nom}</span>
-                </button>
-              ))}
-            </div>
-            <div className="p-8 bg-slate-50 border-t border-slate-100 flex gap-4">
-              <button onClick={() => setShowTransferModal(false)} className="flex-1 py-3 px-4 rounded-full font-bold text-slate-600 hover:bg-slate-200 transition-colors">Annuler</button>
-              <button onClick={handleConfirmTransfer} disabled={!transferCode || actionLoading} className="flex-1 py-3 px-4 rounded-full font-bold bg-primary text-white shadow-lg shadow-primary/20 hover:bg-primary/90 transition-colors disabled:opacity-60">
-                {actionLoading ? 'Transfert…' : 'Confirmer'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }

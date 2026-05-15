@@ -54,6 +54,7 @@ export const updateTicketSchema = z.object({
   guichetId: z.string().optional(),
   caissierUid: z.string().optional(),
   notes: z.string().optional(),
+  relance: z.boolean().optional(),
 })
 
 export const createAlerteSchema = z.object({

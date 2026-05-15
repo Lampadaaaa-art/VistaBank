@@ -31,6 +31,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (data.guichetId !== undefined) updates.guichet_id = data.guichetId ?? null
       if (data.notes !== undefined) updates.notes = data.notes
 
+      // Relancer : met à jour appelle_at pour que la TV détecte le changement et re-annonce
+      if (data.relance) {
+        updates.appelle_at = now
+      }
+
       if (data.statut === "en_cours") {
         updates.appelle_at = now
         updates.caissier_uid = session.uid

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Landmark, Megaphone, Globe, ArrowRight, Clock, History, Maximize, Minimize } from 'lucide-react';
+import { Landmark, Megaphone, Globe, ArrowRight, Clock, History, Maximize, Minimize, Volume2 } from 'lucide-react';
 import { useTickets } from '@/hooks/useTickets';
 import { useGuichets } from '@/hooks/useGuichets';
 import type { Ticket } from '@/lib/types';
@@ -26,6 +26,8 @@ function sortByRecent(tickets: Ticket[], field: keyof Ticket): Ticket[] {
 export default function TvDisplay() {
   const [time, setTime] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // L'audio du navigateur exige un clic utilisateur avant de pouvoir parler
+  const [audioReady, setAudioReady] = useState(false);
 
   const todayStart = useMemo(() => {
     const d = new Date()
@@ -79,41 +81,75 @@ export default function TvDisplay() {
     [guichets, currentTicket]
   );
 
+  const announceQueueRef = useRef<string[]>([]);
+  const isSpeakingRef = useRef(false);
   const lastAnnouncedRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!currentTicket || !currentGuichet) return;
 
-    const key = `${currentTicket.id}:${currentGuichet.numero}`;
-    if (key === lastAnnouncedRef.current) return;
-    lastAnnouncedRef.current = key;
-
-    const text = `Attention. Le ticket ${currentTicket.numero} est appelé. Merci de vous présenter au guichet numéro ${currentGuichet.numero}.`;
-
+  const getBestVoice = useCallback(() => {
     const voices = voicesRef.current;
-    const bestVoice =
+    return (
       voices.find(v => v.lang === 'fr-FR' && v.name.toLowerCase().includes('google'))
       ?? voices.find(v => v.lang === 'fr-FR' && /amélie|marie|thomas|juliette/i.test(v.name))
       ?? voices.find(v => v.lang === 'fr-FR' && v.localService === false)
       ?? voices.find(v => v.lang === 'fr-FR')
-      ?? null;
+      ?? null
+    );
+  }, []);
 
-    const makeUtterance = () => {
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'fr-FR';
-      u.rate = 0.92;
-      u.pitch = 1.08;
-      u.volume = 1.0;
-      if (bestVoice) u.voice = bestVoice;
-      return u;
-    };
+  const speakText = useCallback((text: string, onDone: () => void) => {
+    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'fr-FR';
+    u.rate = 0.92;
+    u.pitch = 1.08;
+    u.volume = 1.0;
+    const v = getBestVoice();
+    if (v) u.voice = v;
+    u.onend = onDone;
+    u.onerror = onDone;
+    window.speechSynthesis.speak(u);
+  }, [getBestVoice]);
 
-    window.speechSynthesis.cancel();
-    setTimeout(() => {
-      const first = makeUtterance();
-      first.onend = () => setTimeout(() => window.speechSynthesis.speak(makeUtterance()), 1500);
-      window.speechSynthesis.speak(first);
-    }, 200);
-  }, [currentTicket?.id, currentGuichet?.numero]);
+  const processAnnounceQueue = useCallback(() => {
+    if (isSpeakingRef.current || announceQueueRef.current.length === 0) return;
+    const text = announceQueueRef.current.shift()!;
+    isSpeakingRef.current = true;
+
+    // Jouer deux fois avec une pause de 1,5 s
+    speakText(text, () => {
+      setTimeout(() => {
+        speakText(text, () => {
+          isSpeakingRef.current = false;
+          setTimeout(processAnnounceQueue, 400);
+        });
+      }, 1500);
+    });
+  }, [speakText]);
+
+  // Déclenche une annonce à chaque nouveau ticket ou relance (appelleAt change)
+  useEffect(() => {
+    if (!audioReady || !currentTicket || !currentGuichet) return;
+
+    // La clé inclut appelleAt pour détecter les "Relancer" du caissier
+    const key = `${currentTicket.id}:${currentGuichet.numero}:${currentTicket.appelleAt ?? ''}`;
+    if (key === lastAnnouncedRef.current) return;
+    lastAnnouncedRef.current = key;
+
+    const text = `Attention. Le ticket ${currentTicket.numero} est appelé. Merci de vous présenter au guichet numéro ${currentGuichet.numero}.`;
+    announceQueueRef.current.push(text);
+    processAnnounceQueue();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioReady, currentTicket?.id, currentTicket?.appelleAt, currentGuichet?.numero]);
+
+  // Débloquer l'audio : le navigateur exige un clic utilisateur pour autoriser la synthèse vocale
+  const handleUnlockAudio = useCallback(() => {
+    // Jouer un utterance vide pour débloquer l'API audio
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+    setAudioReady(true);
+  }, []);
+
   const nextTickets = attenteTickets.slice(0, 4);
   const history = useMemo(
     () => sortByRecent(terminesTickets, 'termineAt').slice(0, 4),
@@ -130,6 +166,25 @@ export default function TvDisplay() {
         .ticker { display: inline-block; white-space: nowrap; animation: ticker 30s linear infinite; }
         @keyframes ticker { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
       `}} />
+
+      {/* Overlay de déblocage audio — exigé par tous les navigateurs modernes */}
+      {!audioReady && (
+        <div
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-6 cursor-pointer"
+          style={{ background: 'rgba(184,0,51,0.96)', backdropFilter: 'blur(4px)' }}
+          onClick={handleUnlockAudio}
+        >
+          <div className="w-24 h-24 rounded-full bg-white/20 flex items-center justify-center mb-2">
+            <Volume2 className="w-12 h-12 text-white" />
+          </div>
+          <p className="text-white font-black text-3xl tracking-tight" style={{fontFamily: M}}>
+            Cliquez pour activer le son
+          </p>
+          <p className="text-white/70 text-base font-medium">
+            Le navigateur exige une interaction avant d&apos;autoriser les annonces vocales
+          </p>
+        </div>
+      )}
 
       {/* Header */}
       <header className="bg-white flex justify-between items-center w-full px-12 h-24 shadow-sm z-10 shrink-0">
