@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, Suspense } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { getSupabaseClient } from "@/lib/supabase"
 import { loginSchema } from "@/lib/validations"
 import { Lock, Eye, EyeOff, AlertCircle, Loader2, User, ArrowRight, Shield } from "lucide-react"
@@ -17,7 +17,6 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get("redirect")
 
@@ -59,11 +58,8 @@ function LoginForm() {
 
       const { role } = (await res.json()) as { role: UserRole }
 
-      if (redirectTo) {
-        router.replace(redirectTo)
-      } else {
-        router.replace(roleToHome(role))
-      }
+      const destination = redirectTo ?? roleToHome(role)
+      window.location.href = destination
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erreur inconnue"
       setError(mapSupabaseError(message))
