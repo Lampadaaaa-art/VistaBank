@@ -35,9 +35,10 @@ export function useAuth() {
     async function loadUser(session: Session | null) {
       clearStatutInterval()
       if (!session?.user) {
-        // No browser session — clear the stale server cookie and redirect if on a protected route
-        await fetch("/api/auth/logout", { method: "POST" }).catch(() => {})
+        // Clear user immediately so AuthGuard hides content before the async fetch
         setUser(null)
+        // Clear stale server cookie in background — don't await before redirecting
+        fetch("/api/auth/logout", { method: "POST" }).catch(() => {})
         const current = pathnameRef.current ?? "/"
         const isProtected = PROTECTED_PREFIXES.some(p => current.startsWith(p))
         if (isProtected) router.replace(`/login?redirect=${encodeURIComponent(current)}`)

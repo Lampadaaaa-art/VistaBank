@@ -1,12 +1,10 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
 import { LogOut } from 'lucide-react'
 import { getSupabaseClient } from '@/lib/supabase'
 import { useAuthStore } from '@/store/authStore'
 
 export function AdminLogoutButton() {
-  const router = useRouter()
   const { user } = useAuthStore()
 
   const handleLogout = async () => {
@@ -24,7 +22,9 @@ export function AdminLogoutButton() {
 
     await supabase.auth.signOut()
     await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/')
+    // Full reload clears Next.js router cache (prefetch data) so protected routes
+    // are not served stale after logout.
+    window.location.href = '/'
   }
 
   return (
