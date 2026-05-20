@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { LayoutDashboard, ListOrdered, MonitorSmartphone, BellRing, FileText, AlertTriangle, CheckCircle2, Clock, Search, MoreVertical, Trash2 } from 'lucide-react';
+import { LayoutDashboard, ListOrdered, MonitorSmartphone, BellRing, FileText, AlertTriangle, CheckCircle2, Clock, Search, MoreVertical, Trash2, Zap, Power } from 'lucide-react';
 import { AdminLogoutButton } from '@/components/admin-logout-button';
 import Link from 'next/link';
 import { useAlertes } from '@/hooks/useAlertes';
@@ -23,24 +23,66 @@ export default function Alertes() {
   const [filter, setFilter] = useState<AlerteFilter>('toutes');
   const [search, setSearch] = useState('');
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const nomComplet = user ? `${user.prenom} ${user.nom}` : 'Chargement…';
 
+  const handleAction = async (alerteId: string, action: 'forcer_appel' | 'fermer_guichet') => {
+    if (actionLoadingId) return;
+    setActionLoadingId(alerteId);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch(`/api/alertes/${alerteId}/actions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(d.error ?? `Erreur ${res.status}`);
+      } else {
+        if (action === 'forcer_appel') setSuccess(`Ticket ${d.ticket?.numero} appelé au ${d.guichet?.nom}`);
+        if (action === 'fermer_guichet') setSuccess('Guichet fermé avec succès');
+      }
+    } catch {
+      setError('Erreur réseau. Vérifiez votre connexion.');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   const handleSupprimer = async (alerteId: string) => {
     setOpenMenuId(null);
-    await fetch(`/api/alertes/${alerteId}`, { method: 'DELETE' });
+    try {
+      const res = await fetch(`/api/alertes/${alerteId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error ?? `Erreur ${res.status}`);
+      }
+    } catch {
+      setError('Erreur réseau. Vérifiez votre connexion.');
+    }
   };
 
   const handleResoude = async (alerteId: string) => {
     if (!user || resolvingId) return;
     setResolvingId(alerteId);
     try {
-      await fetch(`/api/alertes/${alerteId}`, {
+      const res = await fetch(`/api/alertes/${alerteId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resolue: true, resolueParUid: user.uid }),
+        body: JSON.stringify({ resolue: true }),
       });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error ?? `Erreur ${res.status}`);
+      }
+    } catch {
+      setError('Erreur réseau. Vérifiez votre connexion.');
     } finally {
       setResolvingId(null);
     }
@@ -112,6 +154,18 @@ export default function Alertes() {
         </header>
 
         <div className="p-10 max-w-7xl mx-auto w-full">
+          {error && (
+            <div className="mb-6 px-6 py-4 bg-red-50 border border-red-200 rounded-xl text-red-700 font-semibold text-sm flex items-center justify-between gap-3">
+              <span>{error}</span>
+              <button onClick={() => setError('')} className="text-red-400 hover:text-red-600 font-bold text-lg leading-none">×</button>
+            </div>
+          )}
+          {success && (
+            <div className="mb-6 px-6 py-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 font-semibold text-sm flex items-center justify-between gap-3">
+              <span>{success}</span>
+              <button onClick={() => setSuccess('')} className="text-emerald-400 hover:text-emerald-600 font-bold text-lg leading-none">×</button>
+            </div>
+          )}
           {/* KPI Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div className="bg-primary-fixed rounded-[1.5rem] p-6 shadow-[0_20px_50px_rgba(200,16,46,0.15)] flex items-center justify-between relative overflow-hidden">
@@ -211,7 +265,36 @@ export default function Alertes() {
                       </div>
                     </div>
                     {!isResolue && (
-                      <div className="flex items-center gap-3 w-full md:w-auto">
+                      <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
+                        {alerte.type === 'temps_attente' && (
+                          <button
+                            onClick={() => handleAction(alerte.id, 'forcer_appel')}
+                            disabled={actionLoadingId === alerte.id}
+                            className="flex items-center gap-2 flex-1 md:flex-none px-5 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-200 disabled:opacity-50"
+                          >
+                            <Zap className="w-4 h-4" />
+                            {actionLoadingId === alerte.id ? 'En cours…' : 'Forcer l\'appel'}
+                          </button>
+                        )}
+                        {alerte.type === 'guichet_inactif' && (
+                          <button
+                            onClick={() => handleAction(alerte.id, 'fermer_guichet')}
+                            disabled={actionLoadingId === alerte.id}
+                            className="flex items-center gap-2 flex-1 md:flex-none px-5 py-3 bg-orange-500 text-white rounded-xl font-bold text-sm hover:bg-orange-600 transition-colors shadow-md shadow-orange-200 disabled:opacity-50"
+                          >
+                            <Power className="w-4 h-4" />
+                            {actionLoadingId === alerte.id ? 'En cours…' : 'Fermer le guichet'}
+                          </button>
+                        )}
+                        {alerte.type === 'affluence' && (
+                          <Link
+                            href="/superviseur/files-attente"
+                            className="flex items-center gap-2 flex-1 md:flex-none px-5 py-3 bg-surface-container text-on-surface rounded-xl font-bold text-sm hover:bg-surface-container-highest transition-colors border border-on-surface/10"
+                          >
+                            <ListOrdered className="w-4 h-4" />
+                            Voir les files
+                          </Link>
+                        )}
                         <button
                           onClick={() => handleResoude(alerte.id)}
                           disabled={resolvingId === alerte.id}
